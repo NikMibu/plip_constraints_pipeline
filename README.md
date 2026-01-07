@@ -4,11 +4,21 @@ Automatisierte Pipeline zur Generierung von Boltz-2 YAML Inputs mit PLIP-basiert
 
 ## 🎯 Übersicht
 
-Die Pipeline führt 4 Schritte aus:
-1. **Fetch**: PDB-Strukturen mit Affinitätsdaten (Ki/Kd/IC50) von RCSB laden
-2. **Clean**: Strukturen bereinigen (Kristallisationshilfen entfernen)
-3. **PLIP**: Liganden-Interaktionen analysieren
-4. **Generate**: Boltz-2 YAML-Dateien erstellen (mit/ohne Constraints)
+**Zwei parallele Workflows zur Constraint-Generierung:**
+
+### Crystal Workflow (experimentelle Constraints)
+1. **Fetch**: PDB Co-Crystal-Strukturen von RCSB laden
+2. **Clean**: Strukturen bereinigen
+3. **PLIP**: Liganden-Interaktionen aus Crystal analysieren
+4. **Generate**: Boltz-2 YAMLs mit Crystal-Constraints
+
+### DiffDock Workflow (predicted Constraints)
+5. **Prep Ligands**: SMILES → 3D SDF (RDKit)
+6. **DiffDock**: Molekulares Docking
+7. **PLIP**: Interaktionen aus DiffDock-Poses analysieren
+8. **Generate**: Boltz-2 YAMLs mit DiffDock-Constraints
+
+→ **Ziel**: Vergleich ob Crystal vs. DiffDock-Constraints Boltz-2 besser helfen!
 
 ## 🚀 Quick Start
 
@@ -29,17 +39,23 @@ python validate_setup.py
 
 ```bash
 # 1. Config anpassen
-vim config.yaml  # uniprot_id und limit einstellen
+vim config.yaml  # uniprot_id, limit, diffdock settings
 
-# 2. Pipeline ausführen
-python pipeline.py
+# 2. Komplette Pipeline (beide Workflows)
+python3 pipeline.py
 
-# Oder schrittweise
-python pipeline.py --steps fetch,clean
-python pipeline.py --steps plip,generate
+# 3. Nur Crystal-Workflow
+python3 pipeline.py --steps crystal
+
+# 4. Nur DiffDock-Workflow
+python3 pipeline.py --steps diffdock_full
+
+# 5. Schrittweise
+python3 pipeline.py --steps fetch,clean,plip,generate
+python3 pipeline.py --steps prep_ligands,diffdock,diffdock_plip,diffdock_yamls
 
 # Statistiken
-python pipeline.py --stats
+python3 pipeline.py --stats
 ```
 
 ## 📁 Struktur
@@ -47,22 +63,30 @@ python pipeline.py --stats
 ```
 plip_constraints_pipeline/
 ├── pipeline.py           # Main CLI
-├── validate_setup.py     # Setup-Validator
-├── example_run.sh        # Beispiel-Script
-├── config.yaml           # Konfiguration
+├── validate_setup.py
+├── config.yaml           # Konfiguration (inkl. DiffDock)
 ├── requirements.txt
 ├── plip_pipeline/        # Core Module
 │   ├── fetcher.py       # PDB Download
 │   ├── cleaner.py       # PDB Cleaning
-│   ├── plip.py          # PLIP Analysis
-│   ├── generator.py     # YAML Generation
+│   ├── plip.py          # PLIP Analysis (beide Workflows)
+│   ├── generator.py     # YAML Generation (beide Workflows)
+│   ├── ligand_prep.py   # SMILES → SDF (NEU)
+│   ├── diffdock.py      # DiffDock Runner (NEU)
 │   └── utils.py
-└── output/              # Erstellt bei Run
+└── output/
     ├── raw_pdb/
     ├── clean_pdb/
-    ├── plip_reports/
-    ├── boltz_inputs/    # ← Hier sind die YAMLs
-    └── metadata.csv
+    ├── crystal_workflow/     # Crystal-Constraints
+    │   ├── plip_reports/
+    │   └── boltz_yamls/
+    └── diffdock_workflow/    # DiffDock-Constraints
+        ├── ligands_sdf/
+        ├── proteins_apo/
+        ├── poses/
+        ├── complexes/
+        ├── plip_reports/
+        └── boltz_yamls/
 ```
 
 ## ⚙️ Konfiguration (`config.yaml`)
@@ -91,11 +115,17 @@ docker:
 
 ## 📊 Output
 
-Pro Struktur werden **bis zu 3 YAML-Dateien** generiert:
+Pro Struktur werden **bis zu 6 YAML-Dateien** generiert:
 
-**`{pdb_id}_default.yaml`** - Baseline ohne Constraints  
-**`{pdb_id}_pocket.yaml`** - Mit Pocket-Constraints (wenn Kontakte vorhanden)  
-**`{pdb_id}_contact.yaml`** - Mit Contact-Constraints (wenn Kontakte vorhanden)
+**Crystal-Workflow:**
+- `{pdb_id}_crystal_default.yaml` - Baseline
+- `{pdb_id}_crystal_pocket.yaml` - Crystal Pocket-Constraints
+- `{pdb_id}_crystal_contact.yaml` - Crystal Contact-Constraints
+
+**DiffDock-Workflow:**
+- `{pdb_id}_diffdock_default.yaml` - Baseline
+- `{pdb_id}_diffdock_pocket.yaml` - DiffDock Pocket-Constraints
+- `{pdb_id}_diffdock_contact.yaml` - DiffDock Contact-Constraints
 
 ### Constraint-Typen
 

@@ -11,22 +11,31 @@ from .utils import ensure_dir
 class PLIPAnalyzer:
     """Run PLIP analysis and extract ligand interaction constraints."""
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, source: str = 'crystal'):
         """
         Initialize PLIP Analyzer.
         
         Args:
             config: Configuration dictionary
+            source: 'crystal' or 'diffdock'
         """
         base_dir = config['output']['base_dir']
-        self.pdb_dir = os.path.join(base_dir, "clean_pdb")
-        self.output_dir = os.path.join(base_dir, "plip_reports")
+        
+        if source == 'crystal':
+            self.pdb_dir = os.path.join(base_dir, "clean_pdb")
+            self.output_dir = os.path.join(base_dir, "crystal_workflow", "plip_reports")
+        elif source == 'diffdock':
+            self.pdb_dir = os.path.join(base_dir, "diffdock_workflow", "complexes")
+            self.output_dir = os.path.join(base_dir, "diffdock_workflow", "plip_reports")
+        
         ensure_dir(self.output_dir)
         
+        self.source = source
         self.max_distance = config['constraints']['max_distance']
         self.ignore_metal = config['constraints']['ignore_metal_interactions']
-        self.docker_image = config['docker']['plip_image']
-        self.timeout = config['docker']['timeout']
+        self.timeout = config['docker']['plip_timeout']
+        self.micromamba_exe = config.get('micromamba', {}).get('executable', 'micromamba')
+        self.micromamba_env = config.get('micromamba', {}).get('plip_env', 'plip')
     
     def analyze_all(self, df: pd.DataFrame) -> List[Dict]:
         """
@@ -68,7 +77,7 @@ class PLIPAnalyzer:
     
     def _run_plip(self, pdb_id: str) -> Optional[str]:
         """
-        Run PLIP analysis using Docker.
+        Run PLIP analysis using micromamba.
         
         Args:
             pdb_id: PDB ID
@@ -76,23 +85,27 @@ class PLIPAnalyzer:
         Returns:
             Path to XML report or None on error
         """
-        pdb_file = os.path.join(self.pdb_dir, f"{pdb_id}_clean.pdb")
+        if self.source == 'crystal':
+            pdb_file = os.path.join(self.pdb_dir, f"{pdb_id}_clean.pdb")
+        elif self.source == 'diffdock':
+            pdb_file = os.path.join(self.pdb_dir, f"{pdb_id}_diffdock_complex.pdb")
         
         if not os.path.exists(pdb_file):
             print(f"  [ERROR] {pdb_id}: Clean PDB not found")
             return None
         
-        # Setup directories for Docker
-        input_dir = os.path.abspath(self.pdb_dir)
-        output_dir = os.path.abspath(self.output_dir)
+        # Output directory for this structure
+        structure_output = os.path.join(self.output_dir, pdb_id)
+        ensure_dir(structure_output)
         
+        # PLIP command via micromamba
+        # The PDB file now contains both protein and ligand
         cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{input_dir}:/input:ro",
-            "-v", f"{output_dir}:/output",
-            self.docker_image,
-            "-f", f"/input/{pdb_id}_clean.pdb",
-            "-x", "-o", f"/output/{pdb_id}"
+            self.micromamba_exe, "run", "-n", self.micromamba_env,
+            "plip",
+            "-f", os.path.abspath(pdb_file),
+            "-x",
+            "-o", os.path.abspath(structure_output)
         ]
         
         try:
@@ -105,8 +118,8 @@ class PLIPAnalyzer:
             )
             
             # PLIP creates either report.xml or {filename}_report.xml
-            xml_path1 = os.path.join(self.output_dir, pdb_id, "report.xml")
-            xml_path2 = os.path.join(self.output_dir, pdb_id, f"{pdb_id}_clean_report.xml")
+            xml_path1 = os.path.join(structure_output, "report.xml")
+            xml_path2 = os.path.join(structure_output, f"{os.path.basename(pdb_file).replace('.pdb', '')}_report.xml")
             
             if os.path.exists(xml_path1):
                 return xml_path1
@@ -157,9 +170,15 @@ class PLIPAnalyzer:
             
             hetid = hetid_elem.text.strip() if hetid_elem.text else ""
             
-            # Skip if not target ligand
-            if hetid != target_ligand:
-                continue
+            # For DiffDock source, RDKit generates ligands with hetid "UNL"
+            # For crystal source, check exact match
+            if self.source == 'crystal':
+                if hetid != target_ligand:
+                    continue
+            elif self.source == 'diffdock':
+                # Accept UNL or matching hetid
+                if hetid not in ['UNL', target_ligand]:
+                    continue
             
             # Check ligand type - skip metals if configured
             if self.ignore_metal:

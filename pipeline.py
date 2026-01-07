@@ -11,7 +11,14 @@ import yaml
 import pandas as pd
 from typing import Dict, List
 
-from plip_pipeline import PDBFetcher, PDBCleaner, PLIPAnalyzer, BoltzGenerator
+from plip_pipeline import (
+    PDBFetcher, 
+    PDBCleaner, 
+    PLIPAnalyzer, 
+    BoltzGenerator,
+    LigandPreparator,
+    DiffDockRunner
+)
 
 
 def load_config(config_path: str) -> Dict:
@@ -78,22 +85,55 @@ def run_pipeline(config: Dict, steps: List[str]) -> None:
         df.to_csv(metadata_path, index=False)
         print(f"\n✓ Cleaned {len(df)} structures")
     
-    # Step 3: PLIP Analysis
-    if "plip" in steps or "all" in steps:
-        analyzer = PLIPAnalyzer(config)
+    # CRYSTAL WORKFLOW
+    # Step 3: PLIP Analysis (Crystal)
+    if "plip" in steps or "all" in steps or "crystal" in steps:
+        analyzer = PLIPAnalyzer(config, source='crystal')
         constraints = analyzer.analyze_all(df)
-        print(f"\n✓ Analyzed {len(constraints)} structures")
+        print(f"\n✓ Analyzed {len(constraints)} structures (Crystal)")
     
-    # Step 4: Generate YAMLs
-    if "generate" in steps or "all" in steps:
+    # Step 4: Generate YAMLs (Crystal)
+    if "generate" in steps or "all" in steps or "crystal" in steps:
         if constraints is None:
-            # Try to regenerate from PLIP reports if they exist
-            analyzer = PLIPAnalyzer(config)
+            analyzer = PLIPAnalyzer(config, source='crystal')
             constraints = analyzer.analyze_all(df)
         
-        generator = BoltzGenerator(config)
+        generator = BoltzGenerator(config, source='crystal')
         generator.generate_all(df, constraints)
-        print(f"\n✓ Generated {len(df) * 2} YAML files")
+        print(f"\n✓ Generated Crystal YAML files")
+    
+    # DIFFDOCK WORKFLOW
+    # Step 5: Prepare Ligands (SMILES → SDF)
+    if "prep_ligands" in steps or "all" in steps or "diffdock_full" in steps:
+        prep = LigandPreparator(config)
+        df = prep.prepare_all(df)
+        df.to_csv(metadata_path, index=False)
+        print(f"\n✓ Prepared ligands (SMILES → SDF)")
+    
+    # Step 6: Run DiffDock
+    if "diffdock" in steps or "all" in steps or "diffdock_full" in steps:
+        runner = DiffDockRunner(config)
+        df = runner.run_all(df)
+        df.to_csv(metadata_path, index=False)
+        print(f"\n✓ DiffDock docking completed")
+    
+    # Step 7: PLIP Analysis (DiffDock poses)
+    if "diffdock_plip" in steps or "all" in steps or "diffdock_full" in steps:
+        analyzer_dd = PLIPAnalyzer(config, source='diffdock')
+        constraints_dd = analyzer_dd.analyze_all(df)
+        print(f"\n✓ Analyzed {len(constraints_dd)} structures (DiffDock)")
+    else:
+        constraints_dd = None
+    
+    # Step 8: Generate YAMLs (DiffDock)
+    if "diffdock_yamls" in steps or "all" in steps or "diffdock_full" in steps:
+        if constraints_dd is None:
+            analyzer_dd = PLIPAnalyzer(config, source='diffdock')
+            constraints_dd = analyzer_dd.analyze_all(df)
+        
+        generator_dd = BoltzGenerator(config, source='diffdock')
+        generator_dd.generate_all(df, constraints_dd)
+        print(f"\n✓ Generated DiffDock YAML files")
     
     # Final summary
     print("\n" + "=" * 70)
@@ -110,8 +150,8 @@ def run_pipeline(config: Dict, steps: List[str]) -> None:
     print(f"\nOutput directory: {output_dir}")
     print(f"  - Raw PDBs: {os.path.join(output_dir, 'raw_pdb')}")
     print(f"  - Clean PDBs: {os.path.join(output_dir, 'clean_pdb')}")
-    print(f"  - PLIP Reports: {os.path.join(output_dir, 'plip_reports')}")
-    print(f"  - Boltz Inputs: {os.path.join(output_dir, 'boltz_inputs')}")
+    print(f"  - Crystal Workflow: {os.path.join(output_dir, 'crystal_workflow')}")
+    print(f"  - DiffDock Workflow: {os.path.join(output_dir, 'diffdock_workflow')}")
     print(f"  - Metadata: {metadata_path}")
     print()
 
@@ -168,15 +208,27 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run complete pipeline
+  # Run complete pipeline (both workflows)
   python pipeline.py --config config.yaml
   
-  # Run specific steps
-  python pipeline.py --config config.yaml --steps fetch,clean
-  python pipeline.py --config config.yaml --steps plip,generate
+  # Crystal workflow only
+  python pipeline.py --steps fetch,clean,plip,generate
+  
+  # DiffDock workflow only
+  python pipeline.py --steps prep_ligands,diffdock,diffdock_plip,diffdock_yamls
+  
+  # Or use shortcuts
+  python pipeline.py --steps crystal
+  python pipeline.py --steps diffdock_full
   
   # Show statistics
-  python pipeline.py --config config.yaml --stats
+  python pipeline.py --stats
+  
+Available steps:
+  fetch, clean, plip, generate          - Crystal workflow
+  prep_ligands, diffdock,               - DiffDock workflow
+  diffdock_plip, diffdock_yamls
+  crystal, diffdock_full, all           - Shortcuts
         """
     )
     
@@ -189,7 +241,7 @@ Examples:
     parser.add_argument(
         "--steps",
         default="all",
-        help="Comma-separated list of steps: fetch,clean,plip,generate,all (default: all)"
+        help="Comma-separated list of steps (default: all)"
     )
     
     parser.add_argument(

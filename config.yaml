@@ -18,7 +18,7 @@ target:
 
 # Data Fetching Settings
 fetch:
-  limit: 50  # Maximum number of structures to fetch
+  limit: 5  # Maximum number of structures to fetch
   allowed_types:
     - "Ki"
     - "IC50"
@@ -37,8 +37,23 @@ constraints:
   # - pocket.yaml: pocket constraint (binder + contact list)
   # - contact.yaml: individual pairwise contact constraints
   
-# Docker Settings (for PLIP)
+# Docker Settings (kept for timeout values, but not used for execution)
 docker:
-  plip_image: "pharmai/plip"
-  timeout: 300  # Seconds
+  plip_timeout: 300  # Seconds
+  diffdock_timeout: 600  # Seconds (DiffDock takes longer)
+
+# Micromamba Environment Settings
+micromamba:
+  executable: "/mnt/e/master_thesis/bin/micromamba"  # Path to micromamba executable
+  plip_env: "plip"  # Name of PLIP micromamba environment
+  diffdock_env: "diffdock"  # Name of DiffDock micromamba environment
+
+# DiffDock Settings
+diffdock:
+  repo_path: "/mnt/e/master_thesis/DiffDock"  # Path to DiffDock repository
+  samples_per_complex: 40  # Number of poses to generate
+  inference_steps: 20
+  actual_steps: 18
+  top_n_poses: 1  # Use top-N pose(s) for constraints
+  keep_all_poses: false  # Save all poses or just top-N
 

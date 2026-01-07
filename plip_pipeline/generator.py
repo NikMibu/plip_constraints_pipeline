@@ -8,16 +8,23 @@ from .utils import ensure_dir, yaml_quote, get_uniprot_sequence
 class BoltzGenerator:
     """Generate Boltz-2 YAML input files with optional pocket or contact constraints."""
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, source: str = 'crystal'):
         """
         Initialize Boltz Generator.
         
         Args:
             config: Configuration dictionary
+            source: 'crystal' or 'diffdock'
         """
         base_dir = config['output']['base_dir']
-        self.output_dir = os.path.join(base_dir, "boltz_inputs")
+        
+        if source == 'crystal':
+            self.output_dir = os.path.join(base_dir, "crystal_workflow", "boltz_yamls")
+        elif source == 'diffdock':
+            self.output_dir = os.path.join(base_dir, "diffdock_workflow", "boltz_yamls")
+        
         ensure_dir(self.output_dir)
+        self.source = source
         
         self.uniprot_id = config['target']['uniprot_id']
         self.max_distance = config['constraints']['max_distance']
@@ -57,9 +64,12 @@ class BoltzGenerator:
             constraint_data = constraints_map.get(pdb_id, {})
             contacts = constraint_data.get('contacts', [])
             
+            # Prefix for output files
+            prefix = f"{pdb_id}_{self.source}"
+            
             # 1. Generate default YAML (no constraints)
             yaml_default = self._make_yaml(ligand, smiles, constraint_type=None)
-            path_default = os.path.join(self.output_dir, f"{pdb_id}_default.yaml")
+            path_default = os.path.join(self.output_dir, f"{prefix}_default.yaml")
             with open(path_default, 'w') as f:
                 f.write(yaml_default)
             total_files += 1
@@ -67,14 +77,14 @@ class BoltzGenerator:
             # 2. Generate pocket YAML (if contacts exist)
             if contacts:
                 yaml_pocket = self._make_yaml(ligand, smiles, constraint_type='pocket', contacts=contacts)
-                path_pocket = os.path.join(self.output_dir, f"{pdb_id}_pocket.yaml")
+                path_pocket = os.path.join(self.output_dir, f"{prefix}_pocket.yaml")
                 with open(path_pocket, 'w') as f:
                     f.write(yaml_pocket)
                 total_files += 1
                 
                 # 3. Generate contact YAML (if contacts exist)
                 yaml_contact = self._make_yaml(ligand, smiles, constraint_type='contact', contacts=contacts)
-                path_contact = os.path.join(self.output_dir, f"{pdb_id}_contact.yaml")
+                path_contact = os.path.join(self.output_dir, f"{prefix}_contact.yaml")
                 with open(path_contact, 'w') as f:
                     f.write(yaml_contact)
                 total_files += 1
