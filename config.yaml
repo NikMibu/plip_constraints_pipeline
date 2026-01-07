@@ -1,0 +1,44 @@
+# PLIP Constraints Pipeline - Configuration
+
+# Target Protein Settings
+target:
+  uniprot_id: "P00918"  # Human Carbonic Anhydrase 2
+  ligand_whitelist:
+    - "ZN"  # Zink muss immer bleiben
+  forbidden_ligands:
+    - "GOL"  # Glycerol
+    - "DMS"  # Dimethyl sulfoxide
+    - "SO4"  # Sulfate
+    - "HOH"  # Water
+    - "ACT"  # Acetate
+    - "EDO"  # Ethylene glycol
+    - "PEG"  # Polyethylene glycol
+    - "CL"   # Chloride
+    - "NA"   # Sodium
+
+# Data Fetching Settings
+fetch:
+  limit: 50  # Maximum number of structures to fetch
+  allowed_types:
+    - "Ki"
+    - "IC50"
+    - "Kd"  # Optional: Add Kd if needed
+
+# Output Settings
+output:
+  base_dir: "./output"  # Output directory (will be created)
+
+# Constraint Settings
+constraints:
+  max_distance: 6.0  # Maximum distance for constraints (Angstrom)
+  ignore_metal_interactions: true  # Ignore metal complexes, only use ligand interactions
+  # Pipeline generates 3 YAMLs per structure:
+  # - default.yaml: no constraints
+  # - pocket.yaml: pocket constraint (binder + contact list)
+  # - contact.yaml: individual pairwise contact constraints
+  
+# Docker Settings (for PLIP)
+docker:
+  plip_image: "pharmai/plip"
+  timeout: 300  # Seconds
+

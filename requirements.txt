@@ -1,0 +1,11 @@
+# PLIP Constraints Pipeline - Python Dependencies
+
+# Core Dependencies
+biopython>=1.79
+pandas>=1.3.0
+requests>=2.26.0
+pyyaml>=6.0
+
+# Optional: For analysis
+numpy>=1.21.0
+
