@@ -164,12 +164,13 @@ class BoltzGenerator:
                 
             elif constraint_type == 'contact':
                 # Contact constraints: individual pairwise contacts between ligand and each residue
+                # NOTE: Liganden haben nur "Residue 1", daher token1: [ligand_id, 1]
                 for contact in contacts:
                     chain = contact[0]
                     residue = contact[1]
                     
                     lines.append("  - contact:")
-                    lines.append(f"      token1: {yaml_quote(ligand_id)}")  # Ligand as string
+                    lines.append(f'      token1: [{yaml_quote(ligand_id)}, 1]')  # Ligand, residue 1
                     
                     # Format token2
                     try:
