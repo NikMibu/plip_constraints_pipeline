@@ -169,7 +169,7 @@ class BoltzGenerator:
                     residue = contact[1]
                     
                     lines.append("  - contact:")
-                    lines.append(f"      token1: [{yaml_quote(ligand_id)}, 1]")  # Ligand, residue 1
+                    lines.append(f"      token1: {yaml_quote(ligand_id)}")  # Ligand as string
                     
                     # Format token2
                     try:
