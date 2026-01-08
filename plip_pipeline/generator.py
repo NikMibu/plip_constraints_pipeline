@@ -35,18 +35,19 @@ class BoltzGenerator:
             print("[WARNING] Could not fetch protein sequence - using placeholder!")
             self.sequence = "SEQUENCE_PLACEHOLDER"
     
-    def generate_all(self, df: pd.DataFrame, constraints_list: List[Dict]) -> None:
+    def generate_all(self, df: pd.DataFrame, constraints_list: List[Dict], include_contact: bool = False) -> None:
         """
         Generate YAML files for all structures.
         
-        Creates three files per structure:
+        Creates two (or three) files per structure:
         - {pdb_id}_default.yaml: Without constraints
         - {pdb_id}_pocket.yaml: With pocket constraints (if available)
-        - {pdb_id}_contact.yaml: With contact constraints (if available)
+        - {pdb_id}_contact.yaml: With contact constraints (if include_contact=True)
         
         Args:
             df: DataFrame with pdb_id, ligand, smiles columns
             constraints_list: List of constraint dictionaries
+            include_contact: Generate contact YAMLs (requires atom-level data)
         """
         print("\n[GENERATE] Creating Boltz-2 YAML inputs...")
         
@@ -82,14 +83,16 @@ class BoltzGenerator:
                     f.write(yaml_pocket)
                 total_files += 1
                 
-                # 3. Generate contact YAML (if contacts exist)
-                yaml_contact = self._make_yaml(ligand, smiles, constraint_type='contact', contacts=contacts)
-                path_contact = os.path.join(self.output_dir, f"{prefix}_contact.yaml")
-                with open(path_contact, 'w') as f:
-                    f.write(yaml_contact)
-                total_files += 1
+                # 3. Generate contact YAML (optional, disabled by default)
+                if include_contact:
+                    yaml_contact = self._make_yaml(ligand, smiles, constraint_type='contact', contacts=contacts)
+                    path_contact = os.path.join(self.output_dir, f"{prefix}_contact.yaml")
+                    with open(path_contact, 'w') as f:
+                        f.write(yaml_contact)
+                    total_files += 1
                 
-                print(f"  ✓ {pdb_id}: Generated 3 YAMLs ({len(contacts)} constraints)")
+                num_yamls = 3 if include_contact else 2
+                print(f"  ✓ {pdb_id}: Generated {num_yamls} YAMLs ({len(contacts)} constraints)")
             else:
                 print(f"  ✓ {pdb_id}: Generated default only (no constraints)")
         
@@ -164,13 +167,13 @@ class BoltzGenerator:
                 
             elif constraint_type == 'contact':
                 # Contact constraints: individual pairwise contacts between ligand and each residue
-                # NOTE: Liganden haben nur "Residue 1", daher token1: [ligand_id, 1]
+                # For ligands: use [ligand_id] without atom specification (entire molecule)
                 for contact in contacts:
                     chain = contact[0]
                     residue = contact[1]
                     
                     lines.append("  - contact:")
-                    lines.append(f'      token1: [{yaml_quote(ligand_id)}, 1]')  # Ligand, residue 1
+                    lines.append(f'      token1: [{yaml_quote(ligand_id)}]')  # Entire ligand molecule
                     
                     # Format token2
                     try:
