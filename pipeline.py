@@ -99,8 +99,8 @@ def run_pipeline(config: Dict, steps: List[str]) -> None:
             constraints = analyzer.analyze_all(df)
         
         generator = BoltzGenerator(config, source='crystal')
-        generator.generate_all(df, constraints)
-        print(f"\n✓ Generated Crystal YAML files")
+        generator.generate_all(df, constraints, include_default=True)
+        print(f"\n✓ Generated Crystal YAML files (incl. default)")
     
     # DIFFDOCK WORKFLOW
     # Step 5: Prepare Ligands (SMILES → SDF)
@@ -132,8 +132,8 @@ def run_pipeline(config: Dict, steps: List[str]) -> None:
             constraints_dd = analyzer_dd.analyze_all(df)
         
         generator_dd = BoltzGenerator(config, source='diffdock')
-        generator_dd.generate_all(df, constraints_dd)
-        print(f"\n✓ Generated DiffDock YAML files")
+        generator_dd.generate_all(df, constraints_dd, include_default=False)
+        print(f"\n✓ Generated DiffDock YAML files (no default)")
     
     # Final summary
     print("\n" + "=" * 70)

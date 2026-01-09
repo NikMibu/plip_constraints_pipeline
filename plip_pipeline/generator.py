@@ -18,11 +18,8 @@ class BoltzGenerator:
         """
         base_dir = config['output']['base_dir']
         
-        if source == 'crystal':
-            self.output_dir = os.path.join(base_dir, "crystal_workflow", "boltz_yamls")
-        elif source == 'diffdock':
-            self.output_dir = os.path.join(base_dir, "diffdock_workflow", "boltz_yamls")
-        
+        # All YAMLs go to a central boltz_inputs directory
+        self.output_dir = os.path.join(base_dir, "boltz_inputs")
         ensure_dir(self.output_dir)
         self.source = source
         
@@ -35,19 +32,21 @@ class BoltzGenerator:
             print("[WARNING] Could not fetch protein sequence - using placeholder!")
             self.sequence = "SEQUENCE_PLACEHOLDER"
     
-    def generate_all(self, df: pd.DataFrame, constraints_list: List[Dict], include_contact: bool = False) -> None:
+    def generate_all(self, df: pd.DataFrame, constraints_list: List[Dict], 
+                     include_contact: bool = False, include_default: bool = True) -> None:
         """
         Generate YAML files for all structures.
         
-        Creates two (or three) files per structure:
-        - {pdb_id}_default.yaml: Without constraints
-        - {pdb_id}_pocket.yaml: With pocket constraints (if available)
-        - {pdb_id}_contact.yaml: With contact constraints (if include_contact=True)
+        Creates files per structure:
+        - {pdb_id}_default.yaml: Without constraints (if include_default=True)
+        - {pdb_id}_{source}_pocket.yaml: With pocket constraints (if available)
+        - {pdb_id}_{source}_contact.yaml: With contact constraints (if include_contact=True)
         
         Args:
             df: DataFrame with pdb_id, ligand, smiles columns
             constraints_list: List of constraint dictionaries
             include_contact: Generate contact YAMLs (requires atom-level data)
+            include_default: Generate default YAMLs (set False to avoid duplicates)
         """
         print("\n[GENERATE] Creating Boltz-2 YAML inputs...")
         
@@ -65,15 +64,16 @@ class BoltzGenerator:
             constraint_data = constraints_map.get(pdb_id, {})
             contacts = constraint_data.get('contacts', [])
             
-            # Prefix for output files
-            prefix = f"{pdb_id}_{self.source}"
+            # 1. Generate default YAML (no constraints) - optional
+            if include_default:
+                yaml_default = self._make_yaml(ligand, smiles, constraint_type=None)
+                path_default = os.path.join(self.output_dir, f"{pdb_id}_default.yaml")
+                with open(path_default, 'w') as f:
+                    f.write(yaml_default)
+                total_files += 1
             
-            # 1. Generate default YAML (no constraints)
-            yaml_default = self._make_yaml(ligand, smiles, constraint_type=None)
-            path_default = os.path.join(self.output_dir, f"{prefix}_default.yaml")
-            with open(path_default, 'w') as f:
-                f.write(yaml_default)
-            total_files += 1
+            # Prefix for constraint files
+            prefix = f"{pdb_id}_{self.source}"
             
             # 2. Generate pocket YAML (if contacts exist)
             if contacts:
