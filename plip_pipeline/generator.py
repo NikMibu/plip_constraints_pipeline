@@ -26,6 +26,13 @@ class BoltzGenerator:
         self.uniprot_id = config['target']['uniprot_id']
         self.max_distance = config['constraints']['max_distance']
         
+        # MSA path (optional)
+        self.msa_path = config['target'].get('msa_path', None)
+        if self.msa_path and not os.path.isabs(self.msa_path):
+            # Convert relative path to absolute
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            self.msa_path = os.path.join(base_path, self.msa_path)
+        
         # Fetch protein sequence once
         self.sequence = get_uniprot_sequence(self.uniprot_id)
         if not self.sequence:
@@ -124,7 +131,12 @@ class BoltzGenerator:
         lines.append("  - protein:")
         lines.append('      id: ["A"]')
         lines.append(f"      sequence: {yaml_quote(self.sequence)}")
-        lines.append("      msa: empty")
+        
+        # MSA: use path if provided, otherwise empty
+        if self.msa_path and os.path.exists(self.msa_path):
+            lines.append(f"      msa: {yaml_quote(self.msa_path)}")
+        else:
+            lines.append("      msa: empty")
         lines.append("")
         lines.append("  - ligand:")
         lines.append(f"      id: [{yaml_quote(ligand_id)}]")

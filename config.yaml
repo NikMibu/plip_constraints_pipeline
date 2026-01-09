@@ -3,6 +3,7 @@
 # Target Protein Settings
 target:
   uniprot_id: "P00918"  # Human Carbonic Anhydrase 2
+  msa_path: "./data/msa/P00918.a3m"  # Path to MSA file (or empty/null for single sequence mode)
   ligand_whitelist:
     - "ZN"  # Zink muss immer bleiben
   forbidden_ligands:
