@@ -46,3 +46,7 @@ Thumbs.db
 config.yaml.bak
 *.yaml.bak
 
+results/
+results.zip
+
+

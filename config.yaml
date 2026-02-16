@@ -19,7 +19,7 @@ target:
 
 # Data Fetching Settings
 fetch:
-  limit: 5  # Maximum number of structures to fetch
+  limit: 300  # Maximum number of structures to fetch
   allowed_types:
     - "Ki"
     - "IC50"
@@ -45,13 +45,13 @@ docker:
 
 # Micromamba Environment Settings
 micromamba:
-  executable: "/mnt/e/master_thesis/bin/micromamba"  # Path to micromamba executable
+  executable: "micromamba"  # Path to micromamba executable
   plip_env: "plip"  # Name of PLIP micromamba environment
   diffdock_env: "diffdock"  # Name of DiffDock micromamba environment
 
 # DiffDock Settings
 diffdock:
-  repo_path: "/mnt/e/master_thesis/DiffDock"  # Path to DiffDock repository
+  repo_path: "/home/nmitterbuchner/DiffDock"  # Path to DiffDock repository
   samples_per_complex: 40  # Number of poses to generate
   inference_steps: 20
   actual_steps: 18
