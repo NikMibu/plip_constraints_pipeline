@@ -26,6 +26,53 @@ python parse_boltz_predictions.py \
 - `exp_Ki_nM`, `exp_type`, `exp_unit`
 - `boltz_prob_mean`, `boltz_pred_value_mean`
 
+### 1b. Pose-RMSD berechnen (neu)
+
+Vergleicht Liganden-Posen gegen die Crystal-Referenz aus `output/raw_pdb/{pdb_id}.pdb`.
+
+Unterstützte Quellen:
+- DiffDock `rank*.sdf` (z. B. Top-5 pro Komplex)
+- DiffDock `*_diffdock_complex.pdb`
+- Boltz `*.cif` (optional, wenn `--boltz-dir` gesetzt ist)
+
+```bash
+python compute_pose_rmsd.py \
+    --metadata ../output/metadata.csv \
+    --raw-pdb-dir ../output/raw_pdb \
+    --diffdock-poses-dir ../output/diffdock_workflow/poses \
+    --diffdock-complex-dir ../output/diffdock_workflow/complexes \
+    --boltz-dir /path/to/boltz_results_boltz_inputs \
+    --max-diffdock-poses 5 \
+    --output ../results/analysis/pose_rmsd_summary.csv
+```
+
+**Output**: `pose_rmsd_summary.csv` mit u. a.:
+- `pdb_id`, `ligand`, `source`, `scenario`, `pose_name`
+- `rmsd_angstrom`, `method`, `status`
+- `n_atoms_ref`, `n_atoms_pose`, `n_atoms_mapped`
+- `error` (bei fehlerhaften Mappings/Dateien)
+
+### 1c. RMSD-Analyse + Plots (neu)
+
+Erstellt Gruppen-Statistiken und mehrere RMSD-Plots:
+- Boxplot der RMSD-Verteilungen pro `source|scenario`
+- Violin/Boxplot fuer bestes Pose-RMSD pro PDB
+- CDF fuer bestes Pose-RMSD pro PDB
+
+```bash
+python analyze_pose_rmsd.py \
+    --input ../results/analysis/pose_rmsd_summary.csv \
+    --output-dir ../results/analysis \
+    --include-low-coverage
+```
+
+**Outputs**:
+- `pose_rmsd_group_summary.csv`
+- `pose_rmsd_best_per_pdb.csv`
+- `pose_rmsd_boxplot_by_group.png`
+- `pose_rmsd_best_violin_by_group.png`
+- `pose_rmsd_best_cdf.png`
+
 ### 2. Analyse durchführen
 
 Berechne Regression-Metriken und erstelle Plots:
