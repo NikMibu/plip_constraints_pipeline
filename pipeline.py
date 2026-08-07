@@ -58,7 +58,9 @@ def run_pipeline(config: Dict, steps: List[str]) -> None:
     constraints = None
     
     # Step 1: Fetch
-    if "fetch" in steps or "all" in steps:
+    # "crystal" is the shortcut for the whole crystal workflow - fetch, clean,
+    # plip, generate - mirroring "diffdock_full" for the other one.
+    if "fetch" in steps or "all" in steps or "crystal" in steps:
         fetcher = PDBFetcher(config)
         df = fetcher.fetch_all()
         
@@ -77,7 +79,7 @@ def run_pipeline(config: Dict, steps: List[str]) -> None:
         sys.exit(1)
     
     # Step 2: Clean
-    if "clean" in steps or "all" in steps:
+    if "clean" in steps or "all" in steps or "crystal" in steps:
         cleaner = PDBCleaner(config)
         df = cleaner.clean_all(df)
         
@@ -228,7 +230,15 @@ Available steps:
   fetch, clean, plip, generate          - Crystal workflow
   prep_ligands, diffdock,               - DiffDock workflow
   diffdock_plip, diffdock_yamls
-  crystal, diffdock_full, all           - Shortcuts
+
+Shortcuts:
+  crystal        = fetch,clean,plip,generate
+  diffdock_full  = prep_ligands,diffdock,diffdock_plip,diffdock_yamls
+                   (needs the crystal workflow to have run first)
+  all            = both
+
+Steps other than fetch reuse the metadata of an earlier run, so they can be
+repeated individually without downloading again.
         """
     )
     
