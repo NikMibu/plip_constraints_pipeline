@@ -148,12 +148,22 @@ def check_crystal(rep, cfg):
             hint=f"search query failed or returned nothing: {detail}")
 
 
-def boltz_version(exe, env_name):
-    """Return the reported Boltz version, or None.
+def boltz_version(exe, env_name, explicit=None):
+    """Return the reported Boltz version and how it was found, or (None, None).
 
-    Tries the micromamba environment first, then a boltz on PATH.
+    Boltz does not have to live in a micromamba environment - a plain venv is
+    the route that was actually tested - so an explicit executable path comes
+    first. Order: $BOLTZ_EXE, boltz.executable, the micromamba environment,
+    PATH.
     """
     attempts = []
+
+    for candidate in (os.environ.get("BOLTZ_EXE"), explicit):
+        if candidate:
+            path = os.path.expanduser(os.path.expandvars(candidate))
+            if os.path.exists(path):
+                attempts.append([path, "--version"])
+
     if exe and env_name:
         attempts.append([exe, "run", "-n", env_name, "boltz", "--version"])
     if shutil.which("boltz"):
@@ -177,23 +187,20 @@ def check_boltz(rep, cfg, exe):
     """
     print("\nBoltz-2 prediction (optional)")
     env = (cfg or {}).get("micromamba", {}).get("boltz_env", "boltz")
+    explicit = (cfg or {}).get("boltz", {}).get("executable")
 
-    if exe and not micromamba_env_exists(exe, env):
-        rep.add(f"environment '{env}'", False, optional=True,
-                hint=f"not found - rename micromamba.boltz_env if yours differs")
-
-    version, via = boltz_version(exe, env)
+    version, via = boltz_version(exe, env, explicit)
     if version:
         expected = "2.2.1"
-        matches = expected in version
         rep.add("boltz", True, detail=f"{version} (via {via})", optional=True)
-        if not matches:
+        if expected not in version:
             rep.add(f"boltz == {expected}", False, optional=True,
                     hint=f"thesis used {expected}; output format differs between versions")
     else:
         rep.add("boltz", False, optional=True,
-                hint=f"not runnable in '{env}' nor on PATH - "
-                     f"pip install boltz==2.2.1. Needed only to run the YAMLs.")
+                hint="not found. Set boltz.executable to the binary (a venv works), "
+                     "or micromamba.boltz_env to an environment that has it. "
+                     "Needed only to run the generated YAMLs.")
 
 
 def check_diffdock(rep, cfg):

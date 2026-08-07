@@ -59,6 +59,14 @@ micromamba:
                             # run the generated YAMLs; the pipeline itself does
                             # not call boltz. Rename if yours differs.
 
+# Boltz-2 Settings
+boltz:
+  # Boltz does not have to live in a micromamba environment - a plain venv is
+  # the tested route. Point this at the executable if so:
+  #   executable: "/path/to/.venv/bin/boltz"
+  # Resolution order: $BOLTZ_EXE, this key, micromamba.boltz_env, PATH.
+  executable: null
+
 # DiffDock Settings
 diffdock:
   # Path to the DiffDock repository. The environment variable DIFFDOCK_HOME

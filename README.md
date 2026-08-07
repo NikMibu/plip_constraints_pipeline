@@ -145,6 +145,11 @@ Boltz-2 runs at its default parameters (3 recycling / 200 sampling /
 5 affinity recycling / 200 affinity sampling), roughly 5–10 minutes per complex
 per scenario. DiffDock generates 40 poses per ligand.
 
+> **On WSL2, add `--no_kernels`.** The cuEquivariance Triton kernels crash
+> there because WSL's NVML does not implement `nvmlDeviceGetNumGpuCores`. The
+> flag disables them; it costs speed, not accuracy. Native Linux and cloud GPUs
+> are unaffected.
+
 ## Repository layout
 
 ```

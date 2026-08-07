@@ -29,13 +29,16 @@ pip install -r requirements.txt
 
 ## 2. PLIP
 
-PLIP's output determines the constraints, so the version matters. The results
-in the thesis were produced with **PLIP 3.0.0**; version 3.0.1 was observed to
-report one interaction fewer for at least one structure.
+**Pin OpenBabel, not just PLIP.** PLIP does not place hydrogens — OpenBabel
+does, and PLIP derives the hydrogen bonds from them. A different OpenBabel
+therefore changes individual constraints. Measured on PDB 3KWA: residue His94
+is contacted under OpenBabel 3.1.1 and not under 3.2.1, with PLIP 2.3.1 and
+3.0.1 agreeing once the protonation is fixed. The reports behind the published
+results were produced with PLIP 2.3.1.
 
 ```bash
 micromamba create -n plip -c conda-forge python=3.9 openbabel=3.1.1
-micromamba run -n plip pip install plip==3.0.0
+micromamba run -n plip pip install plip==2.3.1
 ```
 
 Check it:
@@ -45,9 +48,9 @@ micromamba run -n plip plip -f <structure>.pdb -x -o /tmp/plip_check
 ```
 
 **Without micromamba.** PLIP and OpenBabel both publish wheels, so a plain
-`pip install plip==3.0.0 openbabel==3.1.1` also works. The pipeline falls back
-to a `plip` on `PATH` when micromamba is absent, and says so loudly — the PLIP
-version decides which interactions are found. Micromamba remains the tested
+`pip install plip==2.3.1 openbabel==3.1.1` also works. The pipeline falls back
+to a `plip` on `PATH` when micromamba is absent, and says so loudly, because
+that fallback bypasses the pinned environment. Micromamba remains the tested
 route.
 
 > **`which micromamba` finds nothing but `micromamba run` works?**
@@ -99,7 +102,34 @@ micromamba run -n diffdock python -m inference \
     --protein_path protein.pdb --ligand ligand.sdf --out_dir /tmp/dd_check
 ```
 
-## 4. Configuration
+## 4. Boltz-2
+
+Only needed to run the generated YAMLs — the pipeline does not call Boltz
+itself. A plain venv is the tested route:
+
+```bash
+python3 -m venv ~/boltz-venv
+~/boltz-venv/bin/pip install boltz==2.2.1
+```
+
+Then point the config at it, so `validate_setup.py` can find it:
+
+```yaml
+boltz:
+  executable: "~/boltz-venv/bin/boltz"
+```
+
+`$BOLTZ_EXE` overrides the config; a micromamba environment named in
+`micromamba.boltz_env` and a `boltz` on `PATH` are also tried, in that order.
+
+Model weights and the CCD (~2–3 GB) download into `~/.boltz` on first use.
+
+> **On WSL2, pass `--no_kernels` to `boltz predict`.** The cuEquivariance
+> Triton kernels crash there because WSL's NVML does not implement
+> `nvmlDeviceGetNumGpuCores`. The flag disables them at some cost in speed.
+> Native Linux and cloud GPUs do not need it.
+
+## 5. Configuration
 
 The relevant section of `config.yaml`:
 
@@ -112,9 +142,15 @@ micromamba:
 diffdock:
   repo_path: "${DIFFDOCK_HOME}"
   samples_per_complex: 40
+
+boltz:
+  executable: null           # or a path, e.g. "~/boltz-venv/bin/boltz"
+
+fetch:
+  pdb_ids_file: null         # or "data/pdb_ids.txt" to reproduce the benchmark
 ```
 
-## 5. Running
+## 6. Running
 
 ```bash
 python3 pipeline.py --steps crystal          # fetch, clean, PLIP, YAMLs   (CPU)
@@ -132,7 +168,9 @@ visible output, and exercises everything except the docking itself.
 |---|---|
 | `PLIP not found` | Neither micromamba nor a `plip` on `PATH`. See section 2. |
 | `micromamba not found` although it works in your shell | It is a shell function; the binary is off `PATH`. Export `$MAMBA_EXE` or set `micromamba.executable`. See section 2. |
-| Loud `falling back to .../plip` banner | micromamba was not resolved, so PLIP is taken from `PATH` and may not be 3.0.0. Constraints can differ. Fix the micromamba resolution before using the results. |
+| Loud `falling back to .../plip` banner | micromamba was not resolved, so PLIP is taken from `PATH` and bypasses the pinned environment. Constraints can differ. Fix the micromamba resolution before using the results. |
+| `boltz not found` in the validator | Set `boltz.executable` to the binary — a venv is fine — or `$BOLTZ_EXE`. See section 4. |
+| `boltz predict` crashes on WSL2 with an NVML error | Add `--no_kernels`. See section 4. |
 | `DiffDock repository not found` | `DIFFDOCK_HOME` unset and `diffdock.repo_path` unusable. See section 3. |
 | `Could not determine the protein sequence` | UniProt unreachable and no usable MSA configured. Set `target.msa_path` to an a3m file — its first record is the target sequence — or restore network access. The pipeline refuses to emit YAMLs without a real sequence. |
 | DiffDock appears to hang on first use | SO(3) lookup tables are being built. Wait 5–10 minutes. |
