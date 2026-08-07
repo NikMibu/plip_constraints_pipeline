@@ -131,9 +131,18 @@ def check_crystal(rep, cfg):
                 detail=f"{found} - WARNING: not the pinned 3.0.0 environment" if found else "",
                 hint="no micromamba and no plip - see SETUP.md section 2")
 
-    for host in ["https://files.rcsb.org", "https://rest.uniprot.org"]:
-        reachable, detail = check_url(host)
-        rep.add(host, reachable, detail)
+    # Probe the endpoints the pipeline actually calls, not the bare hosts.
+    # rest.uniprot.org answers 403 at its root while the FASTA endpoint works,
+    # so checking the host would report a failure that does not exist.
+    uniprot_id = (cfg or {}).get("target", {}).get("uniprot_id", "P00918")
+    for label, url in [
+        ("RCSB search", "https://search.rcsb.org/rcsbsearch/v2/query"),
+        ("RCSB entry data", "https://data.rcsb.org/rest/v1/core/entry/1CRN"),
+        ("RCSB file download", "https://files.rcsb.org/download/1CRN.pdb"),
+        (f"UniProt {uniprot_id}", f"https://rest.uniprot.org/uniprotkb/{uniprot_id}.fasta"),
+    ]:
+        reachable, detail = check_url(url)
+        rep.add(label, reachable, detail=detail, hint=f"{url} - {detail}")
 
 
 def check_diffdock(rep, cfg):
@@ -176,10 +185,17 @@ def check_diffdock(rep, cfg):
 
 
 def check_url(url):
+    """Reachability probe for one endpoint.
+
+    405 (method not allowed) counts as reachable: the RCSB search endpoint only
+    accepts POST, and a GET proves the service answers. Anything else at or
+    above 400 is a real problem.
+    """
     try:
         import requests
-        r = requests.get(url, timeout=10)
-        return r.status_code < 400, f"HTTP {r.status_code}"
+        r = requests.get(url, timeout=15)
+        ok = r.status_code < 400 or r.status_code == 405
+        return ok, f"HTTP {r.status_code}"
     except Exception as e:
         return False, type(e).__name__
 
