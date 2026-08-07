@@ -6,25 +6,41 @@ import subprocess
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Tuple, Optional
 import pandas as pd
-from .utils import ensure_dir
+from .utils import ensure_dir, resolve_micromamba
 
 
 def resolve_plip_command(micromamba_exe: str, micromamba_env: str) -> List[str]:
     """Return the command prefix that runs PLIP on this machine.
 
-    Prefers the micromamba environment, because that is how the pipeline was
-    run for the thesis. Falls back to a plain `plip` on PATH, which is what
-    you get from `pip install plip` - PLIP and its openbabel dependency both
-    ship wheels, so conda is not strictly required.
+    Prefers the micromamba environment, because that is the environment the
+    thesis results were produced in and it pins PLIP 3.0.0. Falls back to a
+    plain `plip` on PATH - but loudly, because the PLIP version decides which
+    interactions are detected and therefore which constraints are generated.
     """
-    if shutil.which(micromamba_exe):
-        return [micromamba_exe, "run", "-n", micromamba_env, "plip"]
-    if shutil.which("plip"):
-        return ["plip"]
+    mamba = resolve_micromamba(micromamba_exe)
+    if mamba:
+        return [mamba, "run", "-n", micromamba_env, "plip"]
+
+    on_path = shutil.which("plip")
+    if on_path:
+        print(
+            "\n" + "!" * 72 +
+            f"\n[PLIP] micromamba not found - falling back to {on_path}"
+            f"\n[PLIP] The '{micromamba_env}' environment pins PLIP 3.0.0. A different"
+            "\n[PLIP] version detects different interactions and therefore yields"
+            "\n[PLIP] different constraints. Check `plip --version` before trusting"
+            "\n[PLIP] these results.\n" + "!" * 72 + "\n"
+        )
+        return [on_path]
+
     raise RuntimeError(
-        f"PLIP not found. Either install micromamba and create the '{micromamba_env}' "
-        f"environment (see MICROMAMBA_SETUP.md), or run `pip install plip` so that "
-        f"`plip` is on your PATH."
+        "PLIP not found.\n"
+        "  - micromamba was not located. A standard install defines it as a shell\n"
+        "    function, so it is invisible to Python; its binary path is exported as\n"
+        "    $MAMBA_EXE. Either export that variable or set micromamba.executable\n"
+        "    in the config to the absolute path.\n"
+        "  - no 'plip' on PATH either.\n"
+        "See SETUP.md section 2."
     )
 
 

@@ -5,7 +5,7 @@ import subprocess
 from typing import Dict, Optional, Tuple
 import pandas as pd
 from Bio import PDB
-from .utils import ensure_dir
+from .utils import ensure_dir, resolve_micromamba
 
 
 class DiffDockRunner:
@@ -55,8 +55,19 @@ class DiffDockRunner:
         self.timeout = config['docker']['diffdock_timeout']
         self.samples = config['diffdock']['samples_per_complex']
         self.top_n = config['diffdock']['top_n_poses']
-        self.micromamba_exe = config.get('micromamba', {}).get('executable', 'micromamba')
+        configured_exe = config.get('micromamba', {}).get('executable', 'micromamba')
         self.micromamba_env = config.get('micromamba', {}).get('diffdock_env', 'diffdock')
+        # See resolve_micromamba: a standard install is a shell function, so
+        # PATH lookup alone finds nothing and subprocess cannot call it.
+        self.micromamba_exe = resolve_micromamba(configured_exe)
+        if not self.micromamba_exe:
+            raise RuntimeError(
+                f"micromamba not found, cannot run the '{self.micromamba_env}' "
+                f"environment.\nIf it is installed as a shell function, its binary "
+                f"path is exported as $MAMBA_EXE - export that variable or set "
+                f"micromamba.executable in the config to the absolute path.\n"
+                f"See SETUP.md section 3."
+            )
         
     def run_all(self, df: pd.DataFrame) -> pd.DataFrame:
         """

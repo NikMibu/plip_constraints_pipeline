@@ -21,6 +21,12 @@ import shutil
 import subprocess
 import sys
 
+try:
+    # Share the pipeline's own resolver so the two cannot drift apart.
+    from plip_pipeline.utils import resolve_micromamba
+except Exception:  # missing deps are reported by the core checks below
+    resolve_micromamba = None
+
 OK = "[ ok ]"
 FAIL = "[fail]"
 WARN = "[warn]"
@@ -101,22 +107,29 @@ def check_core(rep, config_path):
 def check_crystal(rep, cfg):
     print("\nCrystal workflow")
     mm = (cfg or {}).get("micromamba", {})
-    exe = mm.get("executable", "micromamba")
+    configured = mm.get("executable", "micromamba")
     env = mm.get("plip_env", "plip")
 
-    # Mirrors plip_pipeline.plip.resolve_plip_command: micromamba first,
-    # then a plain plip on PATH.
-    if shutil.which(exe):
-        rep.add(f"micromamba ({exe})", True, detail=shutil.which(exe))
+    # Uses the pipeline's own resolver rather than a second implementation.
+    # The previous version of this script checked Docker while the pipeline
+    # had long since moved to micromamba; sharing the code is what stops that
+    # from happening again.
+    exe = resolve_micromamba(configured) if resolve_micromamba else shutil.which(configured)
+
+    if exe:
+        rep.add("micromamba", True, detail=exe)
         if rep.add(f"environment '{env}'", micromamba_env_exists(exe, env),
-                   hint=f"{exe} create -n {env} -c conda-forge python=3.9 openbabel"):
+                   hint=f"micromamba create -n {env} -c conda-forge python=3.9 openbabel=3.1.1"):
             rep.add(f"plip inside '{env}'", tool_in_env(exe, env, "plip"),
-                    hint=f"{exe} run -n {env} pip install plip==3.0.0")
+                    hint=f"micromamba run -n {env} pip install plip==3.0.0")
     else:
-        rep.add(f"micromamba ({exe})", False, detail="not on PATH", optional=True)
-        rep.add("plip on PATH (fallback)", shutil.which("plip") is not None,
-                detail=shutil.which("plip") or "",
-                hint="pip install plip==3.0.0, or install micromamba")
+        rep.add("micromamba", False, optional=True,
+                hint="not found. A standard install is a shell function, invisible to "
+                     "Python - export $MAMBA_EXE or set micromamba.executable")
+        found = shutil.which("plip")
+        rep.add("plip on PATH (fallback)", found is not None,
+                detail=f"{found} - WARNING: not the pinned 3.0.0 environment" if found else "",
+                hint="no micromamba and no plip - see SETUP.md section 2")
 
     for host in ["https://files.rcsb.org", "https://rest.uniprot.org"]:
         reachable, detail = check_url(host)
@@ -126,8 +139,9 @@ def check_crystal(rep, cfg):
 def check_diffdock(rep, cfg):
     print("\nDiffDock workflow (optional)")
     mm = (cfg or {}).get("micromamba", {})
-    exe = mm.get("executable", "micromamba")
+    configured = mm.get("executable", "micromamba")
     env = mm.get("diffdock_env", "diffdock")
+    exe = resolve_micromamba(configured) if resolve_micromamba else shutil.which(configured)
 
     repo = os.environ.get("DIFFDOCK_HOME") or os.path.expandvars(
         (cfg or {}).get("diffdock", {}).get("repo_path", "") or ""
@@ -150,9 +164,9 @@ def check_diffdock(rep, cfg):
         rep.add("DiffDock repository", False, hint="diffdock.repo_path is not set",
                 optional=True)
 
-    if shutil.which(exe):
+    if exe:
         rep.add(f"environment '{env}'", micromamba_env_exists(exe, env),
-                hint="see MICROMAMBA_SETUP.md", optional=True)
+                hint="see SETUP.md section 3", optional=True)
 
     try:
         import rdkit  # noqa: F401

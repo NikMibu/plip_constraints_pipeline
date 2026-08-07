@@ -46,8 +46,22 @@ micromamba run -n plip plip -f <structure>.pdb -x -o /tmp/plip_check
 
 **Without micromamba.** PLIP and OpenBabel both publish wheels, so a plain
 `pip install plip==3.0.0 openbabel==3.1.1` also works. The pipeline falls back
-to a `plip` on `PATH` when micromamba is absent and prints which one it uses.
-Micromamba remains the tested route.
+to a `plip` on `PATH` when micromamba is absent, and says so loudly — the PLIP
+version decides which interactions are found. Micromamba remains the tested
+route.
+
+> **`which micromamba` finds nothing but `micromamba run` works?**
+> That is the normal install. The shell hook defines `micromamba` as a shell
+> *function* and leaves the binary off `PATH`, so it works when you type it but
+> is invisible to Python's `subprocess`. The hook exports the real path as
+> `$MAMBA_EXE`, which the pipeline uses. If your shell does not set it:
+>
+> ```bash
+> export MAMBA_EXE=/path/to/micromamba          # find it with: type micromamba
+> ```
+>
+> or put the absolute path into `micromamba.executable` in `config.yaml`.
+> `python validate_setup.py` tells you which one it resolved to.
 
 ## 3. DiffDock
 
@@ -117,6 +131,8 @@ visible output, and exercises everything except the docking itself.
 | Symptom | Cause and fix |
 |---|---|
 | `PLIP not found` | Neither micromamba nor a `plip` on `PATH`. See section 2. |
+| `micromamba not found` although it works in your shell | It is a shell function; the binary is off `PATH`. Export `$MAMBA_EXE` or set `micromamba.executable`. See section 2. |
+| Loud `falling back to .../plip` banner | micromamba was not resolved, so PLIP is taken from `PATH` and may not be 3.0.0. Constraints can differ. Fix the micromamba resolution before using the results. |
 | `DiffDock repository not found` | `DIFFDOCK_HOME` unset and `diffdock.repo_path` unusable. See section 3. |
 | `Could not determine the protein sequence` | UniProt unreachable and no usable MSA configured. Set `target.msa_path` to an a3m file — its first record is the target sequence — or restore network access. The pipeline refuses to emit YAMLs without a real sequence. |
 | DiffDock appears to hang on first use | SO(3) lookup tables are being built. Wait 5–10 minutes. |

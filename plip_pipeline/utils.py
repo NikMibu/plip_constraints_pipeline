@@ -1,7 +1,55 @@
 """Utility Functions"""
 import os
+import shutil
+from typing import List, Optional
+
 import requests
-from typing import Optional
+
+# Common micromamba install locations, checked after $MAMBA_EXE and PATH.
+_MICROMAMBA_CANDIDATES = [
+    "~/.local/bin/micromamba",
+    "~/micromamba/bin/micromamba",
+    "~/bin/micromamba",
+    "/usr/local/bin/micromamba",
+    "/opt/micromamba/bin/micromamba",
+]
+
+
+def resolve_micromamba(configured: str = "micromamba") -> Optional[str]:
+    """Locate the micromamba executable, or return None.
+
+    `shutil.which` is not enough. The standard micromamba install defines a
+    *shell function* named `micromamba` that wraps the binary, and puts the
+    binary somewhere that is not on PATH. So `micromamba run ...` works when
+    typed interactively while `which micromamba` finds nothing - and
+    subprocess, which does not go through the shell, cannot call it at all.
+
+    The shell hook exports the real path as $MAMBA_EXE, which is the reliable
+    way to find it from Python.
+    """
+    # 1. An explicit path in the config always wins.
+    if configured and os.path.sep in configured:
+        candidate = os.path.expanduser(os.path.expandvars(configured))
+        if os.path.exists(candidate):
+            return candidate
+
+    # 2. Exported by the micromamba shell hook.
+    mamba_exe = os.environ.get("MAMBA_EXE")
+    if mamba_exe and os.path.exists(mamba_exe):
+        return mamba_exe
+
+    # 3. Plain PATH lookup.
+    found = shutil.which(configured or "micromamba")
+    if found:
+        return found
+
+    # 4. Usual install locations.
+    for candidate in _MICROMAMBA_CANDIDATES:
+        candidate = os.path.expanduser(candidate)
+        if os.path.exists(candidate):
+            return candidate
+
+    return None
 
 
 def ensure_dir(path: str) -> None:
