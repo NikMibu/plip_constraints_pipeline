@@ -45,9 +45,14 @@ docker:
 
 # Micromamba Environment Settings
 micromamba:
-  executable: "micromamba"  # Path to micromamba executable
-  plip_env: "plip"  # Name of PLIP micromamba environment
-  diffdock_env: "diffdock"  # Name of DiffDock micromamba environment
+  # A standard micromamba install is a shell function, so the binary is not on
+  # PATH. The pipeline reads $MAMBA_EXE; set an absolute path here to override.
+  executable: "micromamba"
+  plip_env: "plip"          # PLIP environment (pins plip 3.0.0)
+  diffdock_env: "diffdock"  # DiffDock environment
+  boltz_env: "boltz"        # Boltz-2 environment (boltz 2.2.1). Only needed to
+                            # run the generated YAMLs; the pipeline itself does
+                            # not call boltz. Rename if yours differs.
 
 # DiffDock Settings
 diffdock:

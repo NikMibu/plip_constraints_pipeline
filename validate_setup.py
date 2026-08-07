@@ -148,6 +148,54 @@ def check_crystal(rep, cfg):
             hint=f"search query failed or returned nothing: {detail}")
 
 
+def boltz_version(exe, env_name):
+    """Return the reported Boltz version, or None.
+
+    Tries the micromamba environment first, then a boltz on PATH.
+    """
+    attempts = []
+    if exe and env_name:
+        attempts.append([exe, "run", "-n", env_name, "boltz", "--version"])
+    if shutil.which("boltz"):
+        attempts.append(["boltz", "--version"])
+
+    for cmd in attempts:
+        try:
+            r = subprocess.run(cmd, capture_output=True, timeout=180, text=True)
+            text = (r.stdout + r.stderr).strip()
+            if r.returncode == 0 and text:
+                return text.splitlines()[-1].strip(), cmd[0]
+        except Exception:
+            continue
+    return None, None
+
+
+def check_boltz(rep, cfg, exe):
+    """Boltz-2 is not called by the pipeline, but it consumes its output.
+
+    Reported as optional: generating YAMLs is useful without it.
+    """
+    print("\nBoltz-2 prediction (optional)")
+    env = (cfg or {}).get("micromamba", {}).get("boltz_env", "boltz")
+
+    if exe and not micromamba_env_exists(exe, env):
+        rep.add(f"environment '{env}'", False, optional=True,
+                hint=f"not found - rename micromamba.boltz_env if yours differs")
+
+    version, via = boltz_version(exe, env)
+    if version:
+        expected = "2.2.1"
+        matches = expected in version
+        rep.add("boltz", True, detail=f"{version} (via {via})", optional=True)
+        if not matches:
+            rep.add(f"boltz == {expected}", False, optional=True,
+                    hint=f"thesis used {expected}; output format differs between versions")
+    else:
+        rep.add("boltz", False, optional=True,
+                hint=f"not runnable in '{env}' nor on PATH - "
+                     f"pip install boltz==2.2.1. Needed only to run the YAMLs.")
+
+
 def check_diffdock(rep, cfg):
     print("\nDiffDock workflow (optional)")
     mm = (cfg or {}).get("micromamba", {})
@@ -251,6 +299,10 @@ def main():
         check_rcsb_search = lambda uniprot_id: (True, "skipped")
 
     check_crystal(rep, cfg)
+
+    configured = (cfg or {}).get("micromamba", {}).get("executable", "micromamba")
+    mamba = resolve_micromamba(configured) if resolve_micromamba else shutil.which(configured)
+    check_boltz(rep, cfg, mamba)
     check_diffdock(rep, cfg)
 
     passed = sum(1 for _, ok in rep.required if ok)
