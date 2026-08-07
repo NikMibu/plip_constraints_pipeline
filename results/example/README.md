@@ -41,11 +41,6 @@ structures are missing one, so they are excluded to keep the comparison
 paired — otherwise the scenarios would be scored on different structures.
 Affinity has no such requirement and uses all 200.
 
-**Only the corrected atom mapping.** The RMSD numbers come from the
-`rmsd_correct_map` run. Two earlier runs with a faulty mapping exist in the
-working directory and report a median around 4 Å; they are superseded and not
-reproduced here.
-
 ## `yaml_example/`
 
 The three Boltz-2 inputs generated for PDB 3DC3 (ligand acetazolamide), so the

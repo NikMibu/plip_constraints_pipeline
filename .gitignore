@@ -59,3 +59,13 @@ results.zip
 results/*
 !results/example/
 !results/example/**
+
+# ---------------------------------------------------------------
+# RMSD analysis: track the current run only.
+# rmsd_correct_map/ and the common_subsets/ derived from it are the
+# outputs the reported numbers come from. Intermediate runs stay local.
+# ---------------------------------------------------------------
+results_RMSD/analysis/rmsd/
+results_RMSD/analysis/rmsd_clean/
+results_RMSD/analysis/pose_rmsd_*
+results_RMSD/analysis/rmsd_topline_metrics*

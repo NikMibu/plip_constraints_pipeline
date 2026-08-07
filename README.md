@@ -182,13 +182,6 @@ a benchmark of compounds outside the model's training distribution.
 active-site mutants, mostly His64Ala, which adds noise to the affinity
 regression.
 
-**Superseded analysis outputs.** `results_RMSD/analysis/` contains three
-generations of the RMSD computation. Only `rmsd_correct_map/` and the
-`common_subsets/` derived from it use the corrected atom mapping and back the
-numbers above; the files at the top level of that directory are an earlier
-mapping and report a median around 4 Å. `results/example/` contains only the
-current ones.
-
 ## Related repositories
 
 | | |
