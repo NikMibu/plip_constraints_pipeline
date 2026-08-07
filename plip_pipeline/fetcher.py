@@ -133,45 +133,86 @@ class PDBFetcher:
             return []
     
     def _fetch_metadata(self, pdb_ids: List[str]) -> List[Dict]:
-        """Fetch affinity metadata for PDB IDs."""
+        """Fetch affinity metadata for PDB IDs.
+
+        Structures without a usable affinity annotation are dropped. That used
+        to happen without a word, so a list of 200 could quietly become three
+        and the gap only showed up as jumps in the progress counter.
+        """
         data = []
-        
+        skipped_no_affinity = []
+        skipped_wrong_type = {}
+        failed = []
+
         for i, pdb_id in enumerate(pdb_ids):
             if len(data) >= self.limit:
                 break
-            
+
             try:
                 url = f"https://data.rcsb.org/rest/v1/core/entry/{pdb_id}"
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
                 entry_data = response.json()
-                
-                if "rcsb_binding_affinity" in entry_data:
-                    for aff in entry_data["rcsb_binding_affinity"]:
-                        aff_type = aff.get("type")
-                        
-                        if aff_type in self.allowed_types:
-                            ligand = aff.get("comp_id")
-                            smiles = self._fetch_smiles(ligand)
-                            
-                            data.append({
-                                "pdb_id": pdb_id,
-                                "ligand": ligand,
-                                "type": aff_type,
-                                "value": aff.get("value"),
-                                "unit": aff.get("unit", "nM"),
-                                "smiles": smiles
-                            })
-                            
-                            print(f"  [{i+1}/{len(pdb_ids)}] {pdb_id}: {aff_type}={aff.get('value')} {aff.get('unit', 'nM')}")
-                            break  # Only take first matching affinity per structure
-                            
+
+                affinities = entry_data.get("rcsb_binding_affinity") or []
+                if not affinities:
+                    skipped_no_affinity.append(pdb_id)
+                    continue
+
+                match = next((a for a in affinities
+                              if a.get("type") in self.allowed_types), None)
+                if match is None:
+                    skipped_wrong_type[pdb_id] = sorted(
+                        {a.get("type") for a in affinities if a.get("type")}
+                    )
+                    continue
+
+                ligand = match.get("comp_id")
+                data.append({
+                    "pdb_id": pdb_id,
+                    "ligand": ligand,
+                    "type": match.get("type"),
+                    "value": match.get("value"),
+                    "unit": match.get("unit", "nM"),
+                    "smiles": self._fetch_smiles(ligand),
+                })
+                print(f"  [{i+1}/{len(pdb_ids)}] {pdb_id}: "
+                      f"{match.get('type')}={match.get('value')} "
+                      f"{match.get('unit', 'nM')}")
+
             except Exception as e:
+                failed.append(pdb_id)
                 print(f"  [WARNING] Failed to fetch {pdb_id}: {e}")
-            
+
             time.sleep(0.1)  # Rate limiting
-        
+
+        self._report_skips(len(pdb_ids), len(data),
+                           skipped_no_affinity, skipped_wrong_type, failed)
         return data
+
+    @staticmethod
+    def _preview(items, n=8):
+        items = list(items)
+        return ", ".join(map(str, items[:n])) + (" ..." if len(items) > n else "")
+
+    def _report_skips(self, requested, kept, no_affinity, wrong_type, failed):
+        dropped = len(no_affinity) + len(wrong_type) + len(failed)
+        if not dropped:
+            return
+
+        print(f"\n[FETCH] Kept {kept} of {requested} structures, {dropped} dropped:")
+        if no_affinity:
+            print(f"  {len(no_affinity)} without any binding affinity annotation: "
+                  f"{self._preview(no_affinity)}")
+        if wrong_type:
+            types = sorted({t for ts in wrong_type.values() for t in ts})
+            print(f"  {len(wrong_type)} with affinity types outside "
+                  f"{self.allowed_types}: {self._preview(wrong_type)}")
+            if types:
+                print(f"    types seen: {', '.join(types)} - widen "
+                      f"fetch.allowed_types to include them")
+        if failed:
+            print(f"  {len(failed)} failed to fetch: {self._preview(failed)}")
     
     # Field names in rcsb_chem_comp_descriptor, most preferred first.
     # RCSB renamed "smiles" to "SMILES"; the lower-case name is kept so older
