@@ -1,11 +1,31 @@
 """PLIP Analyzer - Runs PLIP and extracts pocket constraints"""
 import os
 import re
+import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from typing import List, Dict, Tuple, Optional
 import pandas as pd
 from .utils import ensure_dir
+
+
+def resolve_plip_command(micromamba_exe: str, micromamba_env: str) -> List[str]:
+    """Return the command prefix that runs PLIP on this machine.
+
+    Prefers the micromamba environment, because that is how the pipeline was
+    run for the thesis. Falls back to a plain `plip` on PATH, which is what
+    you get from `pip install plip` - PLIP and its openbabel dependency both
+    ship wheels, so conda is not strictly required.
+    """
+    if shutil.which(micromamba_exe):
+        return [micromamba_exe, "run", "-n", micromamba_env, "plip"]
+    if shutil.which("plip"):
+        return ["plip"]
+    raise RuntimeError(
+        f"PLIP not found. Either install micromamba and create the '{micromamba_env}' "
+        f"environment (see MICROMAMBA_SETUP.md), or run `pip install plip` so that "
+        f"`plip` is on your PATH."
+    )
 
 
 class PLIPAnalyzer:
@@ -36,6 +56,8 @@ class PLIPAnalyzer:
         self.timeout = config['docker']['plip_timeout']
         self.micromamba_exe = config.get('micromamba', {}).get('executable', 'micromamba')
         self.micromamba_env = config.get('micromamba', {}).get('plip_env', 'plip')
+        self.plip_cmd = resolve_plip_command(self.micromamba_exe, self.micromamba_env)
+        print(f"[PLIP] Using: {' '.join(self.plip_cmd)}")
     
     def analyze_all(self, df: pd.DataFrame) -> List[Dict]:
         """
@@ -98,11 +120,8 @@ class PLIPAnalyzer:
         structure_output = os.path.join(self.output_dir, pdb_id)
         ensure_dir(structure_output)
         
-        # PLIP command via micromamba
         # The PDB file now contains both protein and ligand
-        cmd = [
-            self.micromamba_exe, "run", "-n", self.micromamba_env,
-            "plip",
+        cmd = self.plip_cmd + [
             "-f", os.path.abspath(pdb_file),
             "-x",
             "-o", os.path.abspath(structure_output)

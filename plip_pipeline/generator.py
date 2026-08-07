@@ -2,7 +2,7 @@
 import os
 from typing import List, Dict, Optional
 import pandas as pd
-from .utils import ensure_dir, yaml_quote, get_uniprot_sequence
+from .utils import ensure_dir, yaml_quote, get_uniprot_sequence, read_msa_query_sequence
 
 
 class BoltzGenerator:
@@ -33,11 +33,29 @@ class BoltzGenerator:
             base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             self.msa_path = os.path.join(base_path, self.msa_path)
         
-        # Fetch protein sequence once
+        # Fetch protein sequence once. Order: UniProt, then the query sequence of
+        # the configured MSA, then abort.
+        #
+        # This used to fall back to the literal string "SEQUENCE_PLACEHOLDER" and
+        # carry on. A transient network error therefore produced a full set of
+        # YAMLs that looked complete, passed every later step, and encoded no
+        # protein at all. Failing loudly is the only safe option here.
         self.sequence = get_uniprot_sequence(self.uniprot_id)
+
+        if not self.sequence and self.msa_path:
+            self.sequence = read_msa_query_sequence(self.msa_path)
+            if self.sequence:
+                print(f"[INFO] UniProt unreachable - using the query sequence of "
+                      f"{os.path.basename(self.msa_path)} ({len(self.sequence)} residues)")
+
         if not self.sequence:
-            print("[WARNING] Could not fetch protein sequence - using placeholder!")
-            self.sequence = "SEQUENCE_PLACEHOLDER"
+            raise RuntimeError(
+                f"Could not determine the protein sequence for {self.uniprot_id}.\n"
+                f"UniProt was unreachable and no usable MSA is configured "
+                f"(target.msa_path = {self.msa_path!r}).\n"
+                f"Provide the sequence via an MSA file or restore network access - "
+                f"generating YAMLs without it would silently produce unusable inputs."
+            )
     
     def generate_all(self, df: pd.DataFrame, constraints_list: List[Dict], 
                      include_contact: bool = False, include_default: bool = True) -> None:

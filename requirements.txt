@@ -1,14 +1,31 @@
-# PLIP Constraints Pipeline - Python Dependencies
+# PLIP Constraints Pipeline - Python dependencies
+#
+# Versions are those of the environment the thesis results were produced in
+# (exported 06.08.2026, see the sister file environment-plip.yml).
+# They are pinned exactly: PLIP output depends on the PLIP version, and the
+# constraints derived from it feed straight into the Boltz-2 inputs.
 
-# Core Dependencies
-biopython>=1.79
-pandas>=1.3.0
-requests>=2.26.0
-pyyaml>=6.0
+# --- Pipeline environment -------------------------------------------------
+biopython==1.84
+pandas==2.3.3
+requests==2.32.3
+PyYAML==6.0.2
+rdkit==2025.9.2
+numpy==1.26.4
 
-# For DiffDock Workflow
-rdkit>=2022.9.1
-
-# Optional: For analysis
-numpy>=1.21.0
-
+# --- PLIP -----------------------------------------------------------------
+# Preferred setup is a separate micromamba environment (MICROMAMBA_SETUP.md);
+# the pipeline calls `micromamba run -n plip plip` when micromamba is present.
+# If it is not, PLIP is taken from PATH, so installing it here works too:
+#
+#     pip install plip==3.0.0 openbabel==3.1.1
+#
+# Left commented out because PLIP pulls openbabel, which needs build tooling
+# on some systems and is better handled by conda-forge.
+#
+# Do not silently accept a newer PLIP. Version 3.0.1 was observed to report
+# one interaction fewer than 3.0.0 for PDB 3KWA (residue 94, ligand SPM),
+# which changes the generated pocket constraint.
+#
+# plip==3.0.0
+# openbabel==3.1.1
