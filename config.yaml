@@ -51,7 +51,10 @@ micromamba:
 
 # DiffDock Settings
 diffdock:
-  repo_path: "/home/nmitterbuchner/DiffDock"  # Path to DiffDock repository
+  # Path to the DiffDock repository. The environment variable DIFFDOCK_HOME
+  # takes precedence if it is set:
+  #   export DIFFDOCK_HOME=/path/to/DiffDock
+  repo_path: "${DIFFDOCK_HOME}"
   samples_per_complex: 40  # Number of poses to generate
   inference_steps: 20
   actual_steps: 18

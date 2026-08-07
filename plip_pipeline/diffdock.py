@@ -31,8 +31,27 @@ class DiffDockRunner:
         
         self.clean_pdb_dir = os.path.join(base_dir, "clean_pdb")
         
-        # DiffDock settings
-        self.diffdock_repo = config.get('diffdock', {}).get('repo_path', '/mnt/e/master_thesis/DiffDock')
+        # DiffDock settings.
+        # Resolution order: $DIFFDOCK_HOME, then diffdock.repo_path from the
+        # config (which may itself contain ${DIFFDOCK_HOME} or ~). No absolute
+        # path from a particular machine is baked in here.
+        configured = config.get('diffdock', {}).get('repo_path', '') or ''
+        self.diffdock_repo = os.environ.get('DIFFDOCK_HOME') or os.path.expanduser(
+            os.path.expandvars(configured)
+        )
+        # expandvars leaves unknown variables untouched, so a surviving "${...}"
+        # means the variable is not set.
+        if not self.diffdock_repo or "${" in self.diffdock_repo:
+            raise RuntimeError(
+                "DiffDock location unknown. Set the DIFFDOCK_HOME environment "
+                "variable:\n    export DIFFDOCK_HOME=/path/to/DiffDock\n"
+                "or point diffdock.repo_path in the config at the repository."
+            )
+        if not os.path.isdir(self.diffdock_repo):
+            raise RuntimeError(
+                f"DiffDock repository not found: {self.diffdock_repo}\n"
+                f"Set DIFFDOCK_HOME or correct diffdock.repo_path in the config."
+            )
         self.timeout = config['docker']['diffdock_timeout']
         self.samples = config['diffdock']['samples_per_complex']
         self.top_n = config['diffdock']['top_n_poses']
