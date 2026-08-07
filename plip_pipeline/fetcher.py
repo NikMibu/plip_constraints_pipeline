@@ -65,7 +65,20 @@ class PDBFetcher:
             return pd.DataFrame()
         
         df = pd.DataFrame(data)
-        
+
+        # Say it here, not three steps later. Without SMILES the DiffDock
+        # workflow silently produces nothing, and the cause is this call.
+        usable = df['smiles'].apply(lambda s: isinstance(s, str) and s.strip() not in ("", "N/A"))
+        if not usable.any():
+            print(f"\n[FETCH] WARNING: no SMILES for any of the {len(df)} ligands. "
+                  f"The crystal workflow still works; the DiffDock workflow needs "
+                  f"them and will find nothing to dock.")
+        elif (~usable).any():
+            missing = df.loc[~usable, 'ligand'].tolist()
+            print(f"\n[FETCH] WARNING: no SMILES for {(~usable).sum()} of {len(df)} "
+                  f"ligands: {', '.join(map(str, missing[:10]))}"
+                  f"{' ...' if len(missing) > 10 else ''}")
+
         # 3. Download PDB files
         print(f"\n[FETCH] Downloading PDB files...")
         for pdb_id in df['pdb_id'].unique():
@@ -160,24 +173,45 @@ class PDBFetcher:
         
         return data
     
-    def _fetch_smiles(self, ligand_code: str) -> Optional[str]:
+    # Field names in rcsb_chem_comp_descriptor, most preferred first.
+    # RCSB renamed "smiles" to "SMILES"; the lower-case name is kept so older
+    # deployments still work. SMILES_stereo is a last resort - it carries
+    # stereochemistry the plain field does not, so it can yield a different 3D
+    # ligand and different docking poses. It is not the field the published
+    # results were produced with.
+    _SMILES_KEYS = ("SMILES", "smiles", "SMILES_stereo", "smiles_stereo")
+
+    def _fetch_smiles(self, ligand_code: str) -> str:
         """
-        Fetch SMILES string from RCSB.
-        
+        Fetch the SMILES string for a ligand from RCSB.
+
         Args:
             ligand_code: 3-letter ligand code
-            
+
         Returns:
-            SMILES string or "N/A" on error
+            SMILES string, or "N/A" if none could be retrieved
         """
+        url = f"https://data.rcsb.org/rest/v1/core/chemcomp/{ligand_code}"
         try:
-            url = f"https://data.rcsb.org/rest/v1/core/chemcomp/{ligand_code}"
-            response = requests.get(url, timeout=5)
+            response = requests.get(url, timeout=15)
             response.raise_for_status()
-            data = response.json()
-            return data['rcsb_chem_comp_descriptor']['smiles']
-        except Exception:
+            descriptor = response.json().get("rcsb_chem_comp_descriptor") or {}
+        except Exception as e:
+            print(f"  [WARN] {ligand_code}: could not query RCSB - {e}")
             return "N/A"
+
+        for key in self._SMILES_KEYS:
+            value = descriptor.get(key)
+            if isinstance(value, str) and value.strip():
+                if key not in ("SMILES", "smiles"):
+                    print(f"  [WARN] {ligand_code}: falling back to '{key}'")
+                return value.strip()
+
+        # Silence here is expensive: without SMILES the whole DiffDock workflow
+        # is skipped later, and nothing upstream says why.
+        print(f"  [WARN] {ligand_code}: no SMILES in the RCSB response "
+              f"(fields present: {sorted(descriptor) or 'none'})")
+        return "N/A"
     
     def _download_pdb(self, pdb_id: str) -> None:
         """

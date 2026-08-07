@@ -147,6 +147,42 @@ def check_crystal(rep, cfg):
     rep.add("RCSB search", ok, detail=detail,
             hint=f"search query failed or returned nothing: {detail}")
 
+    ok, detail = check_rcsb_smiles()
+    rep.add("RCSB ligand SMILES", ok, detail=detail,
+            hint=f"{detail} - without SMILES the DiffDock workflow has nothing to dock")
+
+
+def check_rcsb_smiles(ligand="AZM"):
+    """Confirm a ligand SMILES can still be read out of the chemcomp endpoint.
+
+    Uses the fetcher's own key list. RCSB renamed the field from "smiles" to
+    "SMILES", which turned every ligand into "N/A" without any error - the
+    crystal workflow carried on and only the DiffDock half quietly produced
+    nothing. A reachability check would not have caught it.
+    """
+    try:
+        import requests
+        r = requests.get(
+            f"https://data.rcsb.org/rest/v1/core/chemcomp/{ligand}", timeout=15
+        )
+        if r.status_code >= 400:
+            return False, f"HTTP {r.status_code}"
+        descriptor = r.json().get("rcsb_chem_comp_descriptor") or {}
+    except Exception as e:
+        return False, type(e).__name__
+
+    try:
+        from plip_pipeline.fetcher import PDBFetcher
+        keys = PDBFetcher._SMILES_KEYS
+    except Exception:
+        keys = ("SMILES", "smiles")
+
+    for key in keys:
+        value = descriptor.get(key)
+        if isinstance(value, str) and value.strip():
+            return True, f"{ligand} via '{key}'"
+    return False, f"no SMILES field for {ligand}, present: {sorted(descriptor) or 'none'}"
+
 
 def boltz_version(exe, env_name, explicit=None):
     """Return the reported Boltz version and how it was found, or (None, None).
@@ -301,9 +337,10 @@ def main():
     cfg = check_core(rep, args.config)
 
     if args.skip_network:
-        global check_url, check_rcsb_search
+        global check_url, check_rcsb_search, check_rcsb_smiles
         check_url = lambda url: (True, "skipped")
         check_rcsb_search = lambda uniprot_id: (True, "skipped")
+        check_rcsb_smiles = lambda ligand="AZM": (True, "skipped")
 
     check_crystal(rep, cfg)
 
