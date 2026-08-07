@@ -13,19 +13,32 @@ PyYAML==6.0.2
 rdkit==2025.9.2
 numpy==1.26.4
 
-# --- PLIP -----------------------------------------------------------------
-# Preferred setup is a separate micromamba environment (MICROMAMBA_SETUP.md);
-# the pipeline calls `micromamba run -n plip plip` when micromamba is present.
-# If it is not, PLIP is taken from PATH, so installing it here works too:
+# --- PLIP and OpenBabel ---------------------------------------------------
+# These live in a separate micromamba environment (SETUP.md section 2); the
+# pipeline calls `micromamba run -n plip plip`. Listed here for the record and
+# for a pip-only install:
 #
-#     pip install plip==3.0.0 openbabel==3.1.1
+#     pip install plip==2.3.1 openbabel==3.1.1
 #
-# Left commented out because PLIP pulls openbabel, which needs build tooling
-# on some systems and is better handled by conda-forge.
+# Left commented out because openbabel needs build tooling on some systems and
+# is better handled by conda-forge.
 #
-# Do not silently accept a newer PLIP. Version 3.0.1 was observed to report
-# one interaction fewer than 3.0.0 for PDB 3KWA (residue 94, ligand SPM),
-# which changes the generated pocket constraint.
+#     plip==2.3.1        version that produced the results (see below)
+#     openbabel==3.1.1   the pin that actually matters
 #
-# plip==3.0.0
-# openbabel==3.1.1
+# OpenBabel is the reproducibility-critical dependency, not PLIP. PLIP does not
+# place hydrogens itself - OpenBabel does, and PLIP derives hydrogen bonds from
+# them. Verified on PDB 3KWA (ligand SPM):
+#
+#   PLIP 2.3.1, OpenBabel 3.1.1  ->  contacts 94, 143, 198, 199, 200, 201
+#   PLIP 2.3.1, OpenBabel 3.2.1  ->  contacts     143, 198, 199, 200, 201
+#   PLIP 3.0.1, OpenBabel 3.2.1  ->  contacts     143, 198, 199, 200, 201
+#   PLIP 2.3.1 on the 3.1.1-protonated file, --nohydro
+#                                ->  contacts 94, 143, 198, 199, 200, 201
+#
+# Residue 94 is a histidine whose hydrogen bond to the ligand disappears under
+# OpenBabel 3.2.1. The PLIP version makes no difference once the protonation is
+# fixed. The original reports in output/ record plipversion 2.3.1 throughout
+# (411 files), so 2.3.1 is what produced the thesis results - note that the
+# environment export taken later lists 3.0.0, which is the environment's state
+# today, not at run time.
