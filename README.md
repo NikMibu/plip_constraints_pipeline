@@ -160,9 +160,19 @@ results/example/         outputs of the run behind the numbers above
 ## Data
 
 Structures from [RCSB PDB](https://www.rcsb.org/), selected by UniProt
-accession with a reported binding affinity; the resulting list is checked in as
-`data/pdb_ids.txt`. Target sequence from UniProt, MSA in `data/msa/`. No
-licence restrictions — everything is public.
+accession with a reported binding affinity. Target sequence from UniProt, MSA
+in `data/msa/`. No licence restrictions — everything is public.
+
+**Reproducing the exact benchmark set.** The RCSB search runs against live
+annotations, so the same query returns a different set over time — it found 207
+structures for the run behind the numbers above and 197 when last checked. The
+200 structures the benchmark uses are checked in; point the config at them to
+skip the search:
+
+```yaml
+fetch:
+  pdb_ids_file: "data/pdb_ids.txt"
+```
 
 ## Limitations
 

@@ -20,21 +20,42 @@ class PDBFetcher:
         self.uniprot_id = config['target']['uniprot_id']
         self.limit = config['fetch']['limit']
         self.allowed_types = config['fetch']['allowed_types']
+        self.pdb_ids_file = config['fetch'].get('pdb_ids_file') or None
         self.output_dir = os.path.join(config['output']['base_dir'], "raw_pdb")
         ensure_dir(self.output_dir)
-        
+
+    def _read_pdb_ids_file(self) -> List[str]:
+        """Read a fixed list of PDB IDs, one per line, '#' for comments."""
+        path = os.path.expanduser(os.path.expandvars(self.pdb_ids_file))
+        if not os.path.isabs(path):
+            root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            path = os.path.join(root, path)
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                f"fetch.pdb_ids_file points to {path}, which does not exist."
+            )
+        with open(path) as f:
+            ids = [line.split("#")[0].strip().upper() for line in f]
+        return [i for i in ids if i]
+
     def fetch_all(self) -> pd.DataFrame:
         """
         Fetch PDB IDs, download structures, and collect metadata.
-        
+
         Returns:
             DataFrame with columns: pdb_id, ligand, type, value, unit, smiles
         """
-        print(f"\n[FETCH] Searching structures for UniProt ID: {self.uniprot_id}")
-        
-        # 1. Search for PDB IDs
-        pdb_ids = self._search_pdb_ids()
-        print(f"[FETCH] Found {len(pdb_ids)} structures with affinity data")
+        # A fixed list reproduces an earlier run exactly. The RCSB search is
+        # run against live annotations, so the same query returns a different
+        # set as entries and affinity annotations are added over time.
+        if self.pdb_ids_file:
+            pdb_ids = self._read_pdb_ids_file()
+            print(f"\n[FETCH] Using the fixed list {self.pdb_ids_file}: "
+                  f"{len(pdb_ids)} structures (no search)")
+        else:
+            print(f"\n[FETCH] Searching structures for UniProt ID: {self.uniprot_id}")
+            pdb_ids = self._search_pdb_ids()
+            print(f"[FETCH] Found {len(pdb_ids)} structures with affinity data")
         
         # 2. Fetch metadata for each structure
         data = self._fetch_metadata(pdb_ids)

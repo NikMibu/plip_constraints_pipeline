@@ -20,6 +20,11 @@ target:
 # Data Fetching Settings
 fetch:
   limit: 300  # Maximum number of structures to fetch
+  # Fixed list of PDB IDs, one per line. When set, the RCSB search is skipped.
+  # The search runs against live annotations and returns a different set over
+  # time, so use this to reproduce a specific run:
+  #   pdb_ids_file: "data/pdb_ids.txt"   # the 200 benchmark structures
+  pdb_ids_file: null
   allowed_types:
     - "Ki"
     - "IC50"
