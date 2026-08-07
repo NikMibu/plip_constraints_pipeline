@@ -1,135 +1,85 @@
 # PLIP Constraints Pipeline
 
-Automatisierte Pipeline zur Generierung von Boltz-2 YAML Inputs mit PLIP-basierten Pocket-Constraints.
+Do structural priors help a co-folding model? This pipeline builds Boltz-2
+inputs with interaction constraints derived from experimental co-crystal
+structures or from DiffDock poses, against an unconstrained baseline from the
+same run, and measures the difference in affinity accuracy and pose quality.
 
-## 🎯 Übersicht
+Benchmark target: human carbonic anhydrase II (UniProt **P00918**), 200
+co-crystal structures from the PDB.
 
-**Zwei parallele Workflows zur Constraint-Generierung:**
+![Pose RMSD by scenario](results/example/pose_rmsd_best_violin_by_group.png)
 
-### Crystal Workflow (experimentelle Constraints)
-1. **Fetch**: PDB Co-Crystal-Strukturen von RCSB laden
-2. **Clean**: Strukturen bereinigen
-3. **PLIP**: Liganden-Interaktionen aus Crystal analysieren
-4. **Generate**: Boltz-2 YAMLs mit Crystal-Constraints
+## Key results
 
-### DiffDock Workflow (predicted Constraints)
-5. **Prep Ligands**: SMILES → 3D SDF (RDKit)
-6. **DiffDock**: Molekulares Docking
-7. **PLIP**: Interaktionen aus DiffDock-Poses analysieren
-8. **Generate**: Boltz-2 YAMLs mit DiffDock-Constraints
+Constraints did **not** improve predictions on this benchmark. Both the
+affinity correlation and the pose accuracy are best without them.
 
-→ **Ziel**: Vergleich ob Crystal vs. DiffDock-Constraints Boltz-2 besser helfen!
+| Scenario | Affinity R² (n=200) | Median pose RMSD (n=193) |
+|---|---|---|
+| **Default, no constraints** | **0.586** | **0.477 Å** |
+| DiffDock constraints | 0.563 | 0.538 Å |
+| Co-crystal constraints | 0.531 | 0.491 Å |
 
-## 🚀 Quick Start
+That experimentally derived constraints score *worst* inverts the naive
+expectation, and the likely reason is the benchmark itself: these are
+PDB-deposited structures, well covered by the model's training data. The
+unconstrained model can lean on memorised binding patterns, and a constraint
+that restricts the pocket conflicts with them. Boltz-2 already places the
+ligand at a median 0.48 Å, so there is little room left to improve.
 
-### Installation
+**Where the method does become interesting** is the opposite case — compounds
+the model has never seen. In prospective screening of a natural-product library
+([`boltz2-molport-screening`](https://github.com/NikMibu/boltz2-molport-screening)),
+the same constraints reorder the top 100 substantially (r = 0.53 between
+constrained and default ranking, individual shifts up to ±70 positions). That
+is not refinement, it is different information. Constraints look most useful
+exactly where training-data priors are least reliable.
 
-```bash
-# Python Dependencies
-pip install -r requirements.txt
+Practical reading: use unconstrained Boltz-2 as the primary ranker, treat
+constrained output as a complementary structural hypothesis for novel
+chemotypes.
 
-# Docker für PLIP
-docker pull pharmai/plip
+## Pipeline
 
-# Setup validieren
-python validate_setup.py
+Two workflows produce constraints from different sources, so the comparison
+runs against one shared baseline.
+
+```mermaid
+flowchart TD
+    A["RCSB search<br/>UniProt P00918 + affinity data"] --> B["fetch<br/>co-crystal structures"]
+    B --> C["clean<br/>strip buffers, keep Zn"]
+
+    C --> D["plip<br/>interactions in the crystal"]
+    C --> E["prep_ligands<br/>SMILES to 3D SDF"]
+    E --> F["diffdock<br/>40 poses per ligand"]
+    F --> G["plip<br/>interactions in the top pose"]
+
+    D --> H["generate"]
+    G --> H
+    C --> H
+    H --> I["default.yaml<br/>no constraints"]
+    H --> J["crystal_pocket.yaml<br/>crystal constraints"]
+    H --> K["diffdock_pocket.yaml<br/>predicted constraints"]
+
+    I --> L["boltz predict"]
+    J --> L
+    K --> L
+    L --> M["affinity regression<br/>pose RMSD"]
 ```
 
-### Erste Verwendung
+Metal coordination is excluded from the constraints on purpose: for carbonic
+anhydrase almost every inhibitor binds the catalytic zinc through the same
+histidine triad, so those contacts carry no ligand-specific information.
 
-```bash
-# 1. Config anpassen
-vim config.yaml  # uniprot_id, limit, diffdock settings
+## Constraint types
 
-# 2. Komplette Pipeline (beide Workflows)
-python3 pipeline.py
+Both are emitted with `force: false`, i.e. the model is conditioned on them
+rather than steered by a potential.
 
-# 3. Nur Crystal-Workflow
-python3 pipeline.py --steps crystal
+**Pocket** — the ligand must come within `max_distance` of *at least one* of
+the listed residues.
 
-# 4. Nur DiffDock-Workflow
-python3 pipeline.py --steps diffdock_full
-
-# 5. Schrittweise
-python3 pipeline.py --steps fetch,clean,plip,generate
-python3 pipeline.py --steps prep_ligands,diffdock,diffdock_plip,diffdock_yamls
-
-# Statistiken
-python3 pipeline.py --stats
-```
-
-## 📁 Struktur
-
-```
-plip_constraints_pipeline/
-├── pipeline.py           # Main CLI
-├── validate_setup.py
-├── config.yaml           # Konfiguration (inkl. DiffDock)
-├── requirements.txt
-├── plip_pipeline/        # Core Module
-│   ├── fetcher.py       # PDB Download
-│   ├── cleaner.py       # PDB Cleaning
-│   ├── plip.py          # PLIP Analysis (beide Workflows)
-│   ├── generator.py     # YAML Generation (beide Workflows)
-│   ├── ligand_prep.py   # SMILES → SDF (NEU)
-│   ├── diffdock.py      # DiffDock Runner (NEU)
-│   └── utils.py
-└── output/
-    ├── raw_pdb/
-    ├── clean_pdb/
-    ├── crystal_workflow/     # Crystal-Constraints
-    │   ├── plip_reports/
-    │   └── boltz_yamls/
-    └── diffdock_workflow/    # DiffDock-Constraints
-        ├── ligands_sdf/
-        ├── proteins_apo/
-        ├── poses/
-        ├── complexes/
-        ├── plip_reports/
-        └── boltz_yamls/
-```
-
-## ⚙️ Konfiguration (`config.yaml`)
-
-```yaml
-target:
-  uniprot_id: "P00918"                    # Dein Protein (UniProt ID)
-  ligand_whitelist: ["ZN"]                # Residuen behalten
-  forbidden_ligands: ["GOL", "DMS", "SO4", "HOH"]  # Entfernen
-
-fetch:
-  limit: 50                               # Max. Strukturen
-  allowed_types: ["Ki", "IC50"]
-
-output:
-  base_dir: "./output"
-
-constraints:
-  max_distance: 6.0                       # Pocket-Distanz (Å)
-  ignore_metal_interactions: true         # Metall-Komplexe ignorieren
-
-docker:
-  plip_image: "pharmai/plip"
-  timeout: 300
-```
-
-## 📊 Output
-
-Pro Struktur werden **bis zu 6 YAML-Dateien** generiert:
-
-**Crystal-Workflow:**
-- `{pdb_id}_crystal_default.yaml` - Baseline
-- `{pdb_id}_crystal_pocket.yaml` - Crystal Pocket-Constraints
-- `{pdb_id}_crystal_contact.yaml` - Crystal Contact-Constraints
-
-**DiffDock-Workflow:**
-- `{pdb_id}_diffdock_default.yaml` - Baseline
-- `{pdb_id}_diffdock_pocket.yaml` - DiffDock Pocket-Constraints
-- `{pdb_id}_diffdock_contact.yaml` - DiffDock Contact-Constraints
-
-### Constraint-Typen
-
-**Pocket:** Binder zu Liste von Residuen
 ```yaml
 constraints:
   - pocket:
@@ -139,77 +89,120 @@ constraints:
       force: false
 ```
 
-**Contact:** Paarweise Kontakte zwischen Ligand und jedem Residue
-```yaml
-constraints:
-  - contact:
-      token1: ["AZM", 1]
-      token2: ["A", 199]
-      max_distance: 6.0
-      force: false
-  - contact:
-      token1: ["AZM", 1]
-      token2: ["A", 200]
-      max_distance: 6.0
-      force: false
-```
+**Contact** — pairwise, the ligand must come within `max_distance` of *every*
+listed residue. Stricter.
 
-`output/metadata.csv` enthält PDB ID, Ligand, SMILES, Affinitätswerte
+## Installation
 
-## 🔧 CLI Optionen
+Python 3.10, PLIP and DiffDock in separate micromamba environments.
+Full instructions in [SETUP.md](SETUP.md).
 
 ```bash
-python pipeline.py [OPTIONS]
+git clone https://github.com/NikMibu/plip_constraints_pipeline.git
+cd plip_constraints_pipeline
+pip install -r requirements.txt
 
-  --config PATH    Config-Datei (default: config.yaml)
-  --steps STEPS    Schritte: fetch,clean,plip,generate,all (default: all)
-  --output DIR     Output-Verzeichnis überschreiben
-  --stats          Nur Statistiken anzeigen
-  --help           Hilfe
+micromamba create -n plip -c conda-forge python=3.9 openbabel=3.1.1
+micromamba run -n plip pip install plip==2.3.1
+
+python validate_setup.py
 ```
 
-## 🔬 Verwendung mit Boltz-2
+`validate_setup.py` checks what the pipeline actually calls — the micromamba
+environments, PLIP, Boltz-2, DiffDock, and the RCSB and UniProt endpoints — and
+separates required from optional, so a missing DiffDock does not block the
+crystal workflow.
+
+## Quickstart
+
+The crystal workflow needs no GPU and no DiffDock. Set `fetch.limit` in
+`config.yaml` to a small number first.
 
 ```bash
-# YAMLs kopieren
-cp output/boltz_inputs/*.yaml /path/to/boltz/inputs/
-
-# Boltz-2 ausführen
-boltz predict /path/to/boltz/inputs/ --out_dir results/
+python3 pipeline.py --steps crystal      # fetch, clean, PLIP, YAMLs
+python3 pipeline.py --stats
 ```
 
-## 📝 Wichtiges
+Roughly 10 minutes for 20 structures, mostly RCSB downloads. Output:
+`output/boltz_inputs/` with two or three YAMLs per structure. Structures whose
+ligand only coordinates the zinc yield a baseline YAML and no constraint YAML —
+that is expected, not a failure.
 
-### Constraint-Typen: Pocket vs. Contact
+## Full run
 
-**Pocket-Constraint:** Definiert eine Bindungstasche als Ganzes
-- Ligand muss innerhalb von `max_distance` zu **mindestens einem** der Kontakt-Residuen sein
-- Weniger restriktiv, flexibler
+```bash
+export DIFFDOCK_HOME=/path/to/DiffDock
+python3 pipeline.py --steps all
+micromamba run -n boltz boltz predict output/boltz_inputs --out_dir output/boltz_results
 
-**Contact-Constraint:** Definiert einzelne paarweise Kontakte
-- Ligand muss innerhalb von `max_distance` zu **jedem** Kontakt-Residue sein
-- Restriktiver, spezifischer
+python3 analysis/parse_boltz_predictions.py  --results-dir output/boltz_results
+python3 analysis/analyze_affinity_predictions.py
+python3 analysis/compute_pose_rmsd.py --boltz-dir output/boltz_results
+python3 analysis/analyze_pose_rmsd.py
+```
 
-→ Vergleiche beide Ansätze um zu sehen, welcher für dein System besser funktioniert!
+Boltz-2 runs at its default parameters (3 recycling / 200 sampling /
+5 affinity recycling / 200 affinity sampling), roughly 5–10 minutes per complex
+per scenario. DiffDock generates 40 poses per ligand.
 
-### Metall-Komplexe werden ignoriert!
+## Repository layout
 
-Die Pipeline verwendet **nur Liganden-Interaktionen** (H-Bonds, Hydrophobic, Pi-Stacking, Salt Bridges), **nicht** Metall-Komplexe.
+```
+pipeline.py              CLI: --steps fetch,clean,plip,generate,prep_ligands,diffdock,...
+validate_setup.py        pre-flight checks
+config.yaml              target, cutoffs, environment names
+plip_pipeline/           fetcher, cleaner, ligand_prep, plip, diffdock, generator
+analysis/                affinity regression, pose RMSD
+data/pdb_ids.txt         the 200 benchmark structures
+results/example/         outputs of the run behind the numbers above
+```
 
-**Warum?** Bei vielen Enzymen (z.B. CA2) binden Inhibitoren über Metall-Koordination. Die Metall-Residuen sind immer gleich → nicht informativ für liganden-spezifische Constraints.
+## Data
 
-### Troubleshooting
+Structures from [RCSB PDB](https://www.rcsb.org/), selected by UniProt
+accession with a reported binding affinity; the resulting list is checked in as
+`data/pdb_ids.txt`. Target sequence from UniProt, MSA in `data/msa/`. No
+licence restrictions — everything is public.
 
-| Problem | Lösung |
-|---------|--------|
-| Docker Permission Denied | `sudo usermod -aG docker $USER` |
-| Keine UniProt-Sequenz | Pipeline nutzt Placeholder, manuell anpassen |
-| Keine Constraints gefunden | Normal bei reinen Metall-Chelatoren |
-| PLIP Timeout | `docker.timeout` in config.yaml erhöhen |
+## Limitations
 
-## 📚 Referenzen
+**OpenBabel decides the constraints.** PLIP does not place hydrogens, OpenBabel
+does, and PLIP derives hydrogen bonds from them. Re-running with a different
+OpenBabel changes individual constraints: for 3KWA, residue His94 is contacted
+under OpenBabel 3.1.1 and not under 3.2.1, with the PLIP version making no
+difference. Pin `openbabel==3.1.1` for reproduction; see the note in
+[`requirements.txt`](requirements.txt).
 
-- **PLIP**: https://plip-tool.biotec.tu-dresden.de/
-- **Boltz-2**: https://github.com/jwohlwend/boltz
-- **RCSB PDB**: https://www.rcsb.org/
+**One target.** All conclusions are for carbonic anhydrase II, a small,
+rigid, extremely well-characterised active site. The training-data-overlap
+argument above is an interpretation, not a controlled result — testing it needs
+a benchmark of compounds outside the model's training distribution.
 
+**Benchmark composition.** About 7 % of the co-crystal structures are
+active-site mutants, mostly His64Ala, which adds noise to the affinity
+regression.
+
+**Superseded analysis outputs.** `results_RMSD/analysis/` contains three
+generations of the RMSD computation. Only `rmsd_correct_map/` and the
+`common_subsets/` derived from it use the corrected atom mapping and back the
+numbers above; the files at the top level of that directory are an earlier
+mapping and report a median around 4 Å. `results/example/` contains only the
+current ones.
+
+## Related repositories
+
+| | |
+|---|---|
+| [`boltz2-dude-benchmark`](https://github.com/NikMibu/boltz2-dude-benchmark) | Retrospective validation of Boltz-2 affinity prediction on DUD-E |
+| [`boltz2-molport-screening`](https://github.com/NikMibu/boltz2-molport-screening) | Prospective natural-product screening and constraint re-ranking |
+
+## Citation
+
+Interaction profiling with [PLIP](https://plip-tool.biotec.tu-dresden.de/),
+co-folding and affinity prediction with
+[Boltz-2](https://github.com/jwohlwend/boltz), docking with
+[DiffDock](https://github.com/gcorso/DiffDock). See [CITATION.cff](CITATION.cff).
+
+## Licence
+
+MIT, see [LICENSE](LICENSE).

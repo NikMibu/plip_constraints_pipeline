@@ -1,0 +1,66 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "PLIP Constraints Pipeline"
+abstract: >-
+  Generates Boltz-2 inputs carrying protein-ligand interaction constraints
+  derived either from experimental co-crystal structures or from DiffDock
+  poses, alongside an unconstrained baseline from the same run, and evaluates
+  the effect on affinity prediction and pose accuracy. Benchmarked on 200
+  human carbonic anhydrase II co-crystal structures.
+type: software
+authors:
+  - family-names: "Mitterbuchner"
+    given-names: "Niklas"
+    email: "26430420+NikMibu@users.noreply.github.com"
+license: MIT
+repository-code: "https://github.com/NikMibu/plip_constraints_pipeline"
+version: "1.1.0"
+date-released: "2026-08-07"
+keywords:
+  - boltz-2
+  - structural-constraints
+  - protein-ligand-interactions
+  - plip
+  - diffdock
+  - carbonic-anhydrase
+  - pose-prediction
+
+references:
+  - type: software
+    title: "Boltz-2"
+    version: "2.2.1"
+    repository-code: "https://github.com/jwohlwend/boltz"
+    authors:
+      - family-names: "Wohlwend"
+        given-names: "Jeremy"
+    notes: "Co-folding and affinity prediction model. Consumes the YAML inputs generated here."
+
+  - type: software
+    title: "PLIP - Protein-Ligand Interaction Profiler"
+    version: "2.3.1"
+    repository-code: "https://github.com/pharmai/plip"
+    authors:
+      - family-names: "Adasme"
+        given-names: "Melissa F."
+      - family-names: "Linnemann"
+        given-names: "Katja L."
+      - family-names: "Bolz"
+        given-names: "Sarah N."
+    notes: "Interaction profiling. Constraints are derived from its reports."
+
+  - type: software
+    title: "DiffDock"
+    version: "1.1"
+    repository-code: "https://github.com/gcorso/DiffDock"
+    authors:
+      - family-names: "Corso"
+        given-names: "Gabriele"
+    notes: "Diffusion-based docking, source of the predicted-pose constraints."
+
+  - type: software
+    title: "Open Babel"
+    version: "3.1.1"
+    repository-code: "https://github.com/openbabel/openbabel"
+    notes: >-
+      Places the hydrogens PLIP derives hydrogen bonds from. The version is
+      reproducibility-critical: a different one changes individual constraints.

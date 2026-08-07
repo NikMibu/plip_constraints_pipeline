@@ -50,3 +50,12 @@ results/
 results.zip
 
 
+
+# ---------------------------------------------------------------
+# Exception: curated example outputs for reviewers.
+# Must come after the results/ and *.pdb exclusions above.
+# ---------------------------------------------------------------
+!results/
+results/*
+!results/example/
+!results/example/**

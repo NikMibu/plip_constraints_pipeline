@@ -1,0 +1,22 @@
+version: 1
+
+sequences:
+  - protein:
+      id: ["A"]
+      sequence: "MSHHWGYGKHNGPEHWHKDFPIAKGERQSPVDIDTHTAKYDPSLKPLSVSYDQATSLRILNNGHAFNVEFDDSQDKAVLKGGPLDGTYRLIQFHFHWGSLDGQGSEHTVDKKKYAAELHLVHWNTKYGDFGKAVQQPDGLAVLGIFLKVGSAKPGLQKVVDVLDSIKTKGKSADFTNFDPRGLLPESLDYWTYPGSLTTPPLLECVTWIVLKEPISVSSEQVLKFRKLNFNGEGEPEELMVDNWRPAQPLKNRQIKASFK"
+      msa: "/data/local/nmitt/plip_constraints_pipeline/./data/msa/P00918.a3m"
+
+  - ligand:
+      id: ["AZM"]
+      smiles: "CC(=O)Nc1nnc(s1)S(=O)(=O)N"
+
+properties:
+  - affinity:
+      binder: "AZM"
+
+constraints:
+  - pocket:
+      binder: "AZM"
+      contacts: [["A", 199], ["A", 200], ["A", 131]]
+      max_distance: 6.0
+      force: false
