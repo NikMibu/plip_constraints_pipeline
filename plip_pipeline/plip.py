@@ -12,10 +12,10 @@ from .utils import ensure_dir, resolve_micromamba
 def resolve_plip_command(micromamba_exe: str, micromamba_env: str) -> List[str]:
     """Return the command prefix that runs PLIP on this machine.
 
-    Prefers the micromamba environment, because that is the environment the
-    thesis results were produced in and it pins PLIP 3.0.0. Falls back to a
-    plain `plip` on PATH - but loudly, because the PLIP version decides which
-    interactions are detected and therefore which constraints are generated.
+    Prefers the micromamba environment, because that is where PLIP and its
+    OpenBabel are pinned. Falls back to a plain `plip` on PATH - but loudly:
+    OpenBabel places the hydrogens PLIP derives hydrogen bonds from, so a
+    different one there silently changes the generated constraints.
     """
     mamba = resolve_micromamba(micromamba_exe)
     if mamba:
@@ -26,10 +26,11 @@ def resolve_plip_command(micromamba_exe: str, micromamba_env: str) -> List[str]:
         print(
             "\n" + "!" * 72 +
             f"\n[PLIP] micromamba not found - falling back to {on_path}"
-            f"\n[PLIP] The '{micromamba_env}' environment pins PLIP 3.0.0. A different"
-            "\n[PLIP] version detects different interactions and therefore yields"
-            "\n[PLIP] different constraints. Check `plip --version` before trusting"
-            "\n[PLIP] these results.\n" + "!" * 72 + "\n"
+            f"\n[PLIP] The '{micromamba_env}' environment pins PLIP and OpenBabel."
+            "\n[PLIP] OpenBabel places the hydrogens the hydrogen bonds are derived"
+            "\n[PLIP] from, so a different one here yields different constraints."
+            "\n[PLIP] Check the versions before trusting these results.\n"
+            + "!" * 72 + "\n"
         )
         return [on_path]
 

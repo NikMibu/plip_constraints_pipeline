@@ -121,14 +121,14 @@ def check_crystal(rep, cfg):
         if rep.add(f"environment '{env}'", micromamba_env_exists(exe, env),
                    hint=f"micromamba create -n {env} -c conda-forge python=3.9 openbabel=3.1.1"):
             rep.add(f"plip inside '{env}'", tool_in_env(exe, env, "plip"),
-                    hint=f"micromamba run -n {env} pip install plip==3.0.0")
+                    hint=f"micromamba run -n {env} pip install plip==2.3.1")
     else:
         rep.add("micromamba", False, optional=True,
                 hint="not found. A standard install is a shell function, invisible to "
                      "Python - export $MAMBA_EXE or set micromamba.executable")
         found = shutil.which("plip")
         rep.add("plip on PATH (fallback)", found is not None,
-                detail=f"{found} - WARNING: not the pinned 3.0.0 environment" if found else "",
+                detail=f"{found} - WARNING: bypasses the pinned environment" if found else "",
                 hint="no micromamba and no plip - see SETUP.md section 2")
 
     # Probe the endpoints the pipeline actually calls, not the bare hosts.

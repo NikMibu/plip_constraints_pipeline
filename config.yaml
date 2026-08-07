@@ -53,7 +53,7 @@ micromamba:
   # A standard micromamba install is a shell function, so the binary is not on
   # PATH. The pipeline reads $MAMBA_EXE; set an absolute path here to override.
   executable: "micromamba"
-  plip_env: "plip"          # PLIP environment (pins plip 3.0.0)
+  plip_env: "plip"          # PLIP environment (plip 2.3.1 + openbabel 3.1.1)
   diffdock_env: "diffdock"  # DiffDock environment
   boltz_env: "boltz"        # Boltz-2 environment (boltz 2.2.1). Only needed to
                             # run the generated YAMLs; the pipeline itself does
