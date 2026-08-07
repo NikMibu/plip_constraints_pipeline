@@ -46,10 +46,16 @@ class LigandPreparator:
             ligand_id = row['ligand']
             smiles = row['smiles']
             
-            if smiles == "N/A" or not smiles:
-                print(f"  [SKIP] {pdb_id}: No valid SMILES")
+            # The guard has to survive pandas: when every SMILES in the CSV is
+            # "N/A", the column is read as float NaN. `nan == "N/A"` is False
+            # and `not nan` is False too, so a bare check lets NaN through and
+            # RDKit fails deep inside Boost with an unreadable converter error.
+            if not isinstance(smiles, str) or not smiles.strip() or smiles.strip() == "N/A":
+                print(f"  [SKIP] {pdb_id}: no usable SMILES in the metadata "
+                      f"(got {smiles!r})")
                 sdf_paths.append(None)
                 continue
+            smiles = smiles.strip()
             
             try:
                 # Parse SMILES

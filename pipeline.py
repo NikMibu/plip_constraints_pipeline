@@ -110,20 +110,35 @@ def run_pipeline(config: Dict, steps: List[str]) -> None:
         prep = LigandPreparator(config)
         df = prep.prepare_all(df)
         df.to_csv(metadata_path, index=False)
-        print(f"\n✓ Prepared ligands (SMILES → SDF)")
-    
+
+        prepared = df['sdf_path'].notna().sum() if 'sdf_path' in df.columns else 0
+        if prepared == 0:
+            print("\n[ERROR] No ligand could be prepared - the DiffDock workflow "
+                  "cannot continue.")
+            print("        Usually the metadata carries no SMILES; check the "
+                  "'smiles' column of metadata.csv.")
+            sys.exit(1)
+        print(f"\n✓ Prepared ligands (SMILES → SDF): {prepared}/{len(df)}")
+
     # Step 6: Run DiffDock
     if "diffdock" in steps or "all" in steps or "diffdock_full" in steps:
         runner = DiffDockRunner(config)
         df = runner.run_all(df)
         df.to_csv(metadata_path, index=False)
-        print(f"\n✓ DiffDock docking completed")
+
+        docked = df['pose_path'].notna().sum() if 'pose_path' in df.columns else 0
+        if docked == 0:
+            print("\n[ERROR] DiffDock produced no pose - aborting.")
+            sys.exit(1)
+        print(f"\n✓ DiffDock docking completed: {docked}/{len(df)}")
     
     # Step 7: PLIP Analysis (DiffDock poses)
     if "diffdock_plip" in steps or "all" in steps or "diffdock_full" in steps:
         analyzer_dd = PLIPAnalyzer(config, source='diffdock')
         constraints_dd = analyzer_dd.analyze_all(df)
-        print(f"\n✓ Analyzed {len(constraints_dd)} structures (DiffDock)")
+        with_contacts = sum(1 for c in constraints_dd if c.get('contacts'))
+        print(f"\n✓ Analyzed {len(constraints_dd)} structures (DiffDock): "
+              f"{with_contacts} with contacts")
     else:
         constraints_dd = None
     
@@ -135,6 +150,10 @@ def run_pipeline(config: Dict, steps: List[str]) -> None:
         
         generator_dd = BoltzGenerator(config, source='diffdock')
         generator_dd.generate_all(df, constraints_dd, include_default=False)
+        if not any(c.get('contacts') for c in constraints_dd):
+            print("\n[ERROR] No DiffDock constraint YAML was written - none of the "
+                  "structures yielded contacts.")
+            sys.exit(1)
         print(f"\n✓ Generated DiffDock YAML files (no default)")
     
     # Final summary
