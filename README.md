@@ -128,6 +128,36 @@ Roughly 10 minutes for 20 structures, mostly RCSB downloads. Output:
 ligand only coordinates the zinc yield a baseline YAML and no constraint YAML —
 that is expected, not a failure.
 
+## Smoke test
+
+Exercises everything — both workflows, Boltz-2, all four analyses — on three
+structures with reduced parameters. Measured on an RTX 4060 Ti under WSL2:
+DiffDock a few minutes, Boltz-2 under four for nine inputs, analyses seconds.
+
+```bash
+export DIFFDOCK_HOME=/path/to/DiffDock
+sed -e 's|^  limit: 300|  limit: 3|' \
+    -e 's|^  pdb_ids_file: null|  pdb_ids_file: "data/pdb_ids.txt"|' \
+    -e 's|^  base_dir: "./output"|  base_dir: "./output_smoke"|' \
+    -e 's|^  samples_per_complex: 40|  samples_per_complex: 10|' \
+    config.yaml > smoke.yaml
+
+python validate_setup.py --config smoke.yaml
+python pipeline.py --config smoke.yaml --steps crystal
+python pipeline.py --config smoke.yaml --steps diffdock_full
+
+boltz predict output_smoke/boltz_inputs --out_dir output_smoke/boltz_results \
+    --recycling_steps 1 --sampling_steps 10 \
+    --diffusion_samples_affinity 1 --sampling_steps_affinity 10 --no_kernels
+```
+
+> **The numbers from a smoke test mean nothing.** Three structures make the
+> regression noise, and the reduced sampling wrecks pose quality in particular:
+> a run at `1/10` gives a median Boltz RMSD around 18 Å where the full
+> parameters give 0.48 Å. DiffDock is unaffected by those flags and stays near
+> 0.7 Å, which is a good sanity check that the RMSD machinery itself works.
+> What is being tested here is that the chain runs end to end.
+
 ## Full run
 
 ```bash
@@ -135,11 +165,17 @@ export DIFFDOCK_HOME=/path/to/DiffDock
 python3 pipeline.py --steps all
 micromamba run -n boltz boltz predict output/boltz_inputs --out_dir output/boltz_results
 
-python3 analysis/parse_boltz_predictions.py  --results-dir output/boltz_results
+PRED=output/boltz_results/boltz_results_boltz_inputs/predictions
+python3 analysis/parse_boltz_predictions.py --predictions-dir "$PRED"
 python3 analysis/analyze_affinity_predictions.py
-python3 analysis/compute_pose_rmsd.py --boltz-dir output/boltz_results
+python3 analysis/compute_pose_rmsd.py --boltz-dir "$PRED"
 python3 analysis/analyze_pose_rmsd.py
 ```
+
+Boltz writes into `<out_dir>/boltz_results_<input folder>/predictions/`, one
+directory per input YAML. The analysis scripts default to `./output` and
+`./results`; they do not read `output.base_dir` from the config, so pass paths
+explicitly if you changed it.
 
 Boltz-2 runs at its default parameters (3 recycling / 200 sampling /
 5 affinity recycling / 200 affinity sampling), roughly 5–10 minutes per complex
