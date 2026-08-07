@@ -136,13 +136,16 @@ def check_crystal(rep, cfg):
     # so checking the host would report a failure that does not exist.
     uniprot_id = (cfg or {}).get("target", {}).get("uniprot_id", "P00918")
     for label, url in [
-        ("RCSB search", "https://search.rcsb.org/rcsbsearch/v2/query"),
         ("RCSB entry data", "https://data.rcsb.org/rest/v1/core/entry/1CRN"),
         ("RCSB file download", "https://files.rcsb.org/download/1CRN.pdb"),
         (f"UniProt {uniprot_id}", f"https://rest.uniprot.org/uniprotkb/{uniprot_id}.fasta"),
     ]:
         reachable, detail = check_url(url)
         rep.add(label, reachable, detail=detail, hint=f"{url} - {detail}")
+
+    ok, detail = check_rcsb_search(uniprot_id)
+    rep.add("RCSB search", ok, detail=detail,
+            hint=f"search query failed or returned nothing: {detail}")
 
 
 def check_diffdock(rep, cfg):
@@ -185,17 +188,44 @@ def check_diffdock(rep, cfg):
 
 
 def check_url(url):
-    """Reachability probe for one endpoint.
-
-    405 (method not allowed) counts as reachable: the RCSB search endpoint only
-    accepts POST, and a GET proves the service answers. Anything else at or
-    above 400 is a real problem.
-    """
+    """GET probe for one endpoint."""
     try:
         import requests
         r = requests.get(url, timeout=15)
-        ok = r.status_code < 400 or r.status_code == 405
-        return ok, f"HTTP {r.status_code}"
+        return r.status_code < 400, f"HTTP {r.status_code}"
+    except Exception as e:
+        return False, type(e).__name__
+
+
+def check_rcsb_search(uniprot_id):
+    """Run a real search query, the way PDBFetcher._search_pdb_ids does.
+
+    The endpoint only accepts POST and answers a bare GET with 400, so probing
+    it like a normal URL says nothing. Sending an actual query - narrowed to a
+    single hit - confirms the service works and the query shape is still valid.
+    """
+    try:
+        import requests
+        query = {
+            "query": {
+                "type": "terminal",
+                "service": "text",
+                "parameters": {
+                    "attribute": "rcsb_polymer_entity_container_identifiers"
+                                 ".reference_sequence_identifiers.database_accession",
+                    "operator": "exact_match",
+                    "value": uniprot_id,
+                },
+            },
+            "request_options": {"paginate": {"start": 0, "rows": 1}},
+            "return_type": "entry",
+        }
+        r = requests.post("https://search.rcsb.org/rcsbsearch/v2/query",
+                          json=query, timeout=30)
+        if r.status_code >= 400:
+            return False, f"HTTP {r.status_code}"
+        hits = r.json().get("total_count", 0)
+        return hits > 0, f"{hits} structures for {uniprot_id}"
     except Exception as e:
         return False, type(e).__name__
 
@@ -216,8 +246,9 @@ def main():
     cfg = check_core(rep, args.config)
 
     if args.skip_network:
-        global check_url
+        global check_url, check_rcsb_search
         check_url = lambda url: (True, "skipped")
+        check_rcsb_search = lambda uniprot_id: (True, "skipped")
 
     check_crystal(rep, cfg)
     check_diffdock(rep, cfg)
