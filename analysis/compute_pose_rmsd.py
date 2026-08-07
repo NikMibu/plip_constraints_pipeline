@@ -277,13 +277,25 @@ def load_ligand_atoms(path: Path, ligand_resname: Optional[str]) -> Tuple[str, L
     raise ValueError(f"Unsupported file format: {path.suffix}")
 
 
-def best_rmsd_rdkit(ref_mol: Chem.Mol, pose_mol: Chem.Mol, include_hydrogens: bool) -> float:
+def best_rmsd_rdkit(ref_mol: Chem.Mol, pose_mol: Chem.Mol, include_hydrogens: bool,
+                    max_matches: int = 1000000) -> float:
+    """Symmetry-corrected RMSD.
+
+    GetBestRMS enumerates the substructure matches between the two molecules,
+    which for symmetric ligands grows fast enough to look like a hang. RDKit's
+    own limit is 1e6 and is kept as the default so results do not shift;
+    --max-matches lowers it when a structure stalls.
+    """
     ref = Chem.Mol(ref_mol)
     pose = Chem.Mol(pose_mol)
     if not include_hydrogens:
         ref = Chem.RemoveHs(ref)
         pose = Chem.RemoveHs(pose)
-    return float(rdMolAlign.GetBestRMS(pose, ref))
+    try:
+        return float(rdMolAlign.GetBestRMS(pose, ref, maxMatches=max_matches))
+    except TypeError:
+        # Older RDKit without the maxMatches keyword.
+        return float(rdMolAlign.GetBestRMS(pose, ref))
 
 
 def build_diffdock_candidates(diffdock_poses_dir: Path, diffdock_complex_dir: Path, pdb_id: str, max_poses: int) -> List[Tuple[str, str, Path]]:
@@ -354,6 +366,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--diffdock-poses-dir", default="./output/diffdock_workflow/poses", help="DiffDock poses directory")
     parser.add_argument("--diffdock-complex-dir", default="./output/diffdock_workflow/complexes", help="DiffDock complex PDB directory")
     parser.add_argument("--boltz-dir", default="", help="Boltz results root directory with CIF files (optional)")
+    parser.add_argument("--max-matches", type=int, default=1000000,
+                        help="Cap on substructure matches in the symmetry-corrected "
+                             "RMSD. RDKit's own default; lower it (e.g. 10000) if a "
+                             "symmetric ligand makes a structure stall")
     parser.add_argument("--max-diffdock-poses", type=int, default=5, help="Max rank*.sdf poses to evaluate per complex")
     parser.add_argument("--scenarios", default="default,crystal_pocket,diffdock_pocket", help="Comma-separated Boltz scenarios")
     parser.add_argument("--include-hydrogens", action="store_true", help="Include hydrogens in RMSD")
@@ -382,11 +398,16 @@ def main() -> None:
 
     records: List[Dict[str, object]] = []
 
-    for _, row in df.iterrows():
+    total = len(df)
+    for position, (_, row) in enumerate(df.iterrows(), start=1):
         pdb_id = str(row["pdb_id"]).strip()
         ligand = str(row["ligand"]).strip()
         if not pdb_id or not ligand:
             continue
+
+        # Symmetry-corrected RMSD can take a long time on a single ligand, so
+        # say which one is being worked on rather than going quiet.
+        print(f"  [{position}/{total}] {pdb_id} ({ligand})", flush=True)
 
         ref_path = resolve_reference_path(raw_pdb_dir, pdb_id)
         if not ref_path.exists():
@@ -487,7 +508,8 @@ def main() -> None:
                             _, pose_mol = parse_cif_ligand_mol(pose_path, ligand)
                         else:
                             _, pose_mol = parse_pdb_ligand_mol(pose_path, ligand)
-                        rmsd = best_rmsd_rdkit(ref_mol_for_rdkit, pose_mol, args.include_hydrogens)
+                        rmsd = best_rmsd_rdkit(ref_mol_for_rdkit, pose_mol,
+                                               args.include_hydrogens, args.max_matches)
                         method = "rdkit_best_rms"
                         n_mapped = float(
                             Chem.Mol(ref_mol_for_rdkit).GetNumAtoms()

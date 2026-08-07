@@ -12,6 +12,7 @@ requests==2.32.3
 PyYAML==6.0.2
 rdkit==2025.9.2
 numpy==1.26.4
+matplotlib==3.10.7   # analysis/ only, but the plots are the point of it
 
 # --- PLIP and OpenBabel ---------------------------------------------------
 # These live in a separate micromamba environment (SETUP.md section 2); the
