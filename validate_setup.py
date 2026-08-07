@@ -192,28 +192,73 @@ def boltz_version(exe, env_name, explicit=None):
     first. Order: $BOLTZ_EXE, boltz.executable, the micromamba environment,
     PATH.
     """
+    # Each entry is the command prefix that runs boltz, without arguments.
     attempts = []
 
     for candidate in (os.environ.get("BOLTZ_EXE"), explicit):
         if candidate:
             path = os.path.expanduser(os.path.expandvars(candidate))
             if os.path.exists(path):
-                attempts.append([path, "--version"])
+                attempts.append([path])
 
-    if exe and env_name:
-        attempts.append([exe, "run", "-n", env_name, "boltz", "--version"])
-    if shutil.which("boltz"):
-        attempts.append(["boltz", "--version"])
+    if exe and env_name and micromamba_env_exists(exe, env_name):
+        attempts.append([exe, "run", "-n", env_name, "boltz"])
+    found_on_path = shutil.which("boltz")
+    if found_on_path:
+        attempts.append([found_on_path])
+
+    if not attempts:
+        return None, None
 
     for cmd in attempts:
+        version = _version_via_metadata(cmd)
+        if version:
+            return version, cmd[0]
+
+    # Nothing answered. Fall back to proving the binary at least runs. This is
+    # the slow path: boltz has no --version, only --help, and that imports
+    # torch - 45 s on a native disk, longer from a drive mounted into WSL.
+    print("  ... boltz has no --version; running --help, which imports torch "
+          "and takes a minute", flush=True)
+    for cmd in attempts:
         try:
-            r = subprocess.run(cmd, capture_output=True, timeout=180, text=True)
-            text = (r.stdout + r.stderr).strip()
-            if r.returncode == 0 and text:
-                return text.splitlines()[-1].strip(), cmd[0]
+            r = subprocess.run(cmd + ["--help"], capture_output=True,
+                               timeout=300, text=True)
+            if r.returncode == 0 and "boltz" in (r.stdout + r.stderr).lower():
+                return "installed, version unknown", cmd[0]
+        except subprocess.TimeoutExpired:
+            print(f"  ... timed out after 5 min: {cmd[0]}", flush=True)
         except Exception:
             continue
     return None, None
+
+
+def _version_via_metadata(cmd):
+    """Read the installed boltz version from the package metadata.
+
+    Boltz exposes no --version flag, and its --help imports torch, which costs
+    tens of seconds. The distribution metadata gives the exact version without
+    importing anything heavy, so this is both faster and more precise.
+    """
+    probe = "import importlib.metadata as m; print(m.version('boltz'))"
+    if len(cmd) == 1:  # a boltz executable: use the interpreter beside it
+        bindir = os.path.dirname(os.path.abspath(cmd[0]))
+        python = next((p for p in (os.path.join(bindir, "python"),
+                                   os.path.join(bindir, "python3"))
+                       if os.path.exists(p)), None)
+        if not python:
+            return None
+        probe_cmd = [python, "-c", probe]
+    else:  # ["micromamba", "run", "-n", <env>, "boltz"]
+        probe_cmd = cmd[:-1] + ["python", "-c", probe]
+
+    try:
+        r = subprocess.run(probe_cmd, capture_output=True, timeout=60, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return None
 
 
 def check_boltz(rep, cfg, exe):
@@ -327,6 +372,8 @@ def main():
     p.add_argument("--config", default="config.yaml", help="pipeline config to validate against")
     p.add_argument("--skip-network", action="store_true",
                    help="do not contact RCSB and UniProt")
+    p.add_argument("--skip-boltz", action="store_true",
+                   help="skip the Boltz check, which imports torch and is slow")
     args = p.parse_args()
 
     print("=" * 66)
@@ -346,7 +393,11 @@ def main():
 
     configured = (cfg or {}).get("micromamba", {}).get("executable", "micromamba")
     mamba = resolve_micromamba(configured) if resolve_micromamba else shutil.which(configured)
-    check_boltz(rep, cfg, mamba)
+    if args.skip_boltz:
+        print("\nBoltz-2 prediction (optional)")
+        print("  [ -- ] skipped")
+    else:
+        check_boltz(rep, cfg, mamba)
     check_diffdock(rep, cfg)
 
     passed = sum(1 for _, ok in rep.required if ok)
