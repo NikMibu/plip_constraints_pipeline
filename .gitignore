@@ -69,3 +69,6 @@ results_RMSD/analysis/rmsd/
 results_RMSD/analysis/rmsd_clean/
 results_RMSD/analysis/pose_rmsd_*
 results_RMSD/analysis/rmsd_topline_metrics*
+
+# Local scratch runs
+run_*/

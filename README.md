@@ -195,7 +195,9 @@ config.yaml              target, cutoffs, environment names
 plip_pipeline/           fetcher, cleaner, ligand_prep, plip, diffdock, generator
 analysis/                affinity regression, pose RMSD
 data/pdb_ids.txt         the 200 benchmark structures
-results/example/         outputs of the run behind the numbers above
+results/example/         curated outputs of the run behind the numbers above
+results_RMSD/analysis/   the full analysis output of that same run;
+                         results/example/ is the reader-facing subset of it
 ```
 
 ## Data
